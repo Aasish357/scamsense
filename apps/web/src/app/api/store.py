@@ -14,10 +14,12 @@ except ImportError:  # pragma: no cover - optional local dependency
 _ANALYSIS_LOCK = RLock()
 _USER_LOCK = RLock()
 _FEEDBACK_LOCK = RLock()
+_REPORT_LOCK = RLock()
 
 _ANALYSES: Dict[str, Dict[str, Any]] = {}
 _USERS: Dict[str, Dict[str, str]] = {}
 _FEEDBACK: List[Dict[str, Any]] = []
+_REPORTS: List[Dict[str, Any]] = []
 
 
 def utc_now_iso() -> str:
@@ -73,38 +75,52 @@ def get_analysis(analysis_id: str) -> Optional[Dict[str, Any]]:
         return deepcopy(analysis) if analysis is not None else None
 
 
-def list_analyses() -> List[Dict[str, Any]]:
+def list_analyses(owner: Optional[str] = None) -> List[Dict[str, Any]]:
+    """List analyses; with ``owner`` set, only that user's records are returned."""
     client = get_supabase_client()
     if client is not None:
         try:
-            response = client.table("analyses").select("*").order("created_at", desc=True).execute()
+            query = client.table("analyses").select("*")
+            if owner is not None:
+                query = query.eq("owner", owner)
+            response = query.order("created_at", desc=True).execute()
             data = getattr(response, "data", None) or []
             return list(data)
         except Exception:
             pass
 
     with _ANALYSIS_LOCK:
+        records = (
+            record
+            for record in _ANALYSES.values()
+            if owner is None or record.get("owner") == owner
+        )
         return sorted(
-            (deepcopy(record) for record in _ANALYSES.values()),
+            (deepcopy(record) for record in records),
             key=lambda record: record.get("created_at", ""),
             reverse=True,
         )
 
 
-def delete_analysis(analysis_id: str) -> bool:
+def delete_analysis(analysis_id: str, owner: Optional[str] = None) -> bool:
+    """Delete an analysis only when an authenticated caller owns the record."""
+    if owner is None:
+        return False
+    existing = get_analysis(analysis_id)
+    if existing is None or existing.get("owner") != owner:
+        return False
+
     client = get_supabase_client()
     if client is not None:
         try:
-            existing = get_analysis(analysis_id)
-            if existing is None:
-                return False
             client.table("analyses").delete().eq("analysis_id", analysis_id).execute()
             return True
         except Exception:
             pass
 
     with _ANALYSIS_LOCK:
-        if analysis_id in _ANALYSES:
+        record = _ANALYSES.get(analysis_id)
+        if record is not None and record.get("owner") == owner:
             del _ANALYSES[analysis_id]
             return True
     return False
@@ -135,3 +151,64 @@ def append_feedback(username: str, message: str) -> Dict[str, Any]:
     with _FEEDBACK_LOCK:
         _FEEDBACK.append(record)
         return deepcopy(record)
+
+
+def list_feedback() -> List[Dict[str, Any]]:
+    client = get_supabase_client()
+    if client is not None:
+        try:
+            response = client.table("feedback").select("*").order("created_at", desc=True).execute()
+            data = getattr(response, "data", None) or []
+            if data:
+                return list(data)
+        except Exception:
+            pass
+    with _FEEDBACK_LOCK:
+        return sorted(
+            (deepcopy(record) for record in _FEEDBACK),
+            key=lambda record: record.get("created_at", ""),
+            reverse=True,
+        )
+
+
+def append_report(
+    username: Optional[str],
+    analysis_id: Optional[str],
+    reason: str,
+    message: str,
+) -> Dict[str, Any]:
+    record = {
+        "username": username or "guest",
+        "analysis_id": analysis_id or "",
+        "reason": reason,
+        "message": message,
+        "created_at": utc_now_iso(),
+    }
+    client = get_supabase_client()
+    if client is not None:
+        try:
+            client.table("reports").insert(record).execute()
+            return deepcopy(record)
+        except Exception:
+            pass
+    with _REPORT_LOCK:
+        _REPORTS.append(record)
+        return deepcopy(record)
+
+
+def list_reports() -> List[Dict[str, Any]]:
+    client = get_supabase_client()
+    if client is not None:
+        try:
+            response = client.table("reports").select("*").order("created_at", desc=True).execute()
+            data = getattr(response, "data", None) or []
+            if data:
+                return list(data)
+        except Exception:
+            pass
+    with _REPORT_LOCK:
+        return sorted(
+            (deepcopy(record) for record in _REPORTS),
+            key=lambda record: record.get("created_at", ""),
+            reverse=True,
+        )

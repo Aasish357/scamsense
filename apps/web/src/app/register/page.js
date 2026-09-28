@@ -1,10 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import apiRequest from '../../lib/apiClient';
+import Link from 'next/link';
+import apiRequest, { clearSession, getUsername, setSession } from '../../lib/apiClient';
 
 export default function RegisterPage() {
   const [isLogin, setIsLogin] = useState(false);
+  const [currentUser, setCurrentUser] = useState(getUsername());
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -22,6 +24,8 @@ export default function RegisterPage() {
           username,
           password,
         });
+        setSession(response?.token, response?.username);
+        setCurrentUser(response?.username || null);
         setStatus({ type: 'success', text: response?.msg || 'Logged in successfully!' });
       } else {
         const response = await apiRequest('/register', 'POST', {
@@ -50,6 +54,38 @@ export default function RegisterPage() {
           {isLogin ? 'Sign in to access your personal detection history' : 'Register to preserve risk analyses and reports'}
         </p>
       </div>
+
+      {currentUser && (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: '1rem',
+          background: 'rgba(16, 185, 129, 0.12)',
+          border: '1px solid rgba(16, 185, 129, 0.3)',
+          color: '#34d399',
+          padding: '0.75rem 1rem',
+          borderRadius: '0.5rem',
+          marginBottom: '1rem',
+          fontSize: '0.9rem'
+        }}>
+          <span>Signed in as <strong>{currentUser}</strong> · <Link href="/history" style={{ color: '#6ee7b7', textDecoration: 'underline' }}>view your history</Link></span>
+          <button
+            type="button"
+            onClick={() => { clearSession(); setCurrentUser(null); setStatus(null); }}
+            style={{
+              background: 'transparent',
+              border: '1px solid rgba(16, 185, 129, 0.4)',
+              color: '#34d399',
+              padding: '0.3rem 0.7rem',
+              borderRadius: '0.35rem',
+              fontSize: '0.8rem'
+            }}
+          >
+            Sign out
+          </button>
+        </div>
+      )}
 
       {status && (
         <div style={{

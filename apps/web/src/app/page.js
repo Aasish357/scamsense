@@ -6,6 +6,7 @@ import apiRequest from '../lib/apiClient';
 
 export default function Home() {
   const [backendStatus, setBackendStatus] = useState('checking');
+  const [llmStatus, setLlmStatus] = useState('checking');
 
   useEffect(() => {
     let isMounted = true;
@@ -21,7 +22,20 @@ export default function Home() {
         }
       }
     }
+    async function checkLlmHealth() {
+      try {
+        const res = await apiRequest('/llm/health');
+        if (isMounted) {
+          setLlmStatus(res?.available ? 'online' : 'offline');
+        }
+      } catch (err) {
+        if (isMounted) {
+          setLlmStatus('offline');
+        }
+      }
+    }
     checkHealth();
+    checkLlmHealth();
     return () => {
       isMounted = false;
     };
@@ -49,6 +63,9 @@ export default function Home() {
             backgroundColor: backendStatus === 'online' ? '#10b981' : (backendStatus === 'checking' ? '#f59e0b' : '#ef4444')
           }}></span>
           <span>FastAPI Backend: <strong>{backendStatus}</strong></span>
+          <span style={{ width: '1px', height: '14px', background: '#334155', display: 'inline-block', margin: '0 0.35rem' }}></span>
+          <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: llmStatus === 'online' ? '#10b981' : (llmStatus === 'checking' ? '#f59e0b' : '#ef4444') }}></span>
+          <span>Local AI (Ollama): <strong>{llmStatus}</strong></span>
         </div>
 
         <h1 style={{ fontSize: '2.8rem', fontWeight: 800, lineHeight: 1.15, letterSpacing: '-0.03em', marginBottom: '1.25rem' }}>
@@ -108,7 +125,7 @@ export default function Home() {
           <div>
             <h4 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: '0.25rem' }}>FastAPI Backend Connected</h4>
             <p style={{ color: '#94a3b8', fontSize: '0.875rem' }}>
-              Endpoints active: <code>/check</code>, <code>/screenshot</code>, <code>/brand/{'{name}'}</code>, <code>/analyses/{'{id}'}</code>, <code>/api/v1/me/analyses</code>.
+              Endpoints active: <code>/analyze</code> (LLM + RAG), <code>/check</code>, <code>/screenshot</code>, <code>/brand/{'{name}'}</code>, <code>/analyses/{'{id}'}</code>, <code>/llm/health</code>, <code>/api/v1/me/analyses</code>.
             </p>
           </div>
           <Link href="/check" style={{ color: '#60a5fa', fontWeight: 600, fontSize: '0.9rem' }}>

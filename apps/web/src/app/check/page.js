@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -12,6 +12,7 @@ export default function CheckPage() {
   const [inputText, setInputText] = useState('');
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState('');
   const [error, setError] = useState(null);
 
   // Quick preset buttons for demo testing
@@ -28,8 +29,11 @@ export default function CheckPage() {
     setError(null);
 
     try {
-      const data = await apiRequest('/check', 'POST', { content: inputText });
+      // Extract -> RAG retrieval -> local LLM analysis, all server-side.
+      setStatus('Sending content to the local AI engine...');
+      const data = await apiRequest('/analyze', 'POST', { content: inputText });
       if (data?.analysis_id) {
+        setStatus('Analysis complete. Loading results...');
         router.push(`/results/${data.analysis_id}`);
       } else {
         throw new Error('Analysis completed but no ID returned');
@@ -38,6 +42,7 @@ export default function CheckPage() {
       console.error(err);
       setError(err.message || 'Failed to analyze text content');
       setLoading(false);
+      setStatus('');
     }
   };
 
@@ -51,6 +56,8 @@ export default function CheckPage() {
     setError(null);
 
     try {
+      // Step 1: extract text + links from the image (OCR / local vision model).
+      setStatus('Extracting text and links from the image...');
       const formData = new FormData();
       formData.append('file', file);
 
@@ -67,12 +74,15 @@ export default function CheckPage() {
       const screenshotResult = await res.json();
       const extractedText = screenshotResult.extracted_text || '';
 
-      // Feed OCR text directly into /check for risk analysis
-      const checkResult = await apiRequest('/check', 'POST', {
+      // Step 2: send the extracted content to the LLM + RAG pipeline.
+      setStatus('Sending extracted content to the local AI engine...');
+      const checkResult = await apiRequest('/analyze', 'POST', {
         content: extractedText || 'Uploaded screenshot with no readable text',
+        question: 'Analyze this screenshot for scam signals',
       });
 
       if (checkResult?.analysis_id) {
+        setStatus('Analysis complete. Loading results...');
         router.push(`/results/${checkResult.analysis_id}`);
       } else {
         throw new Error('Screenshot analyzed but could not create analysis record');
@@ -81,6 +91,7 @@ export default function CheckPage() {
       console.error(err);
       setError(err.message || 'Failed to analyze screenshot');
       setLoading(false);
+      setStatus('');
     }
   };
 
@@ -89,7 +100,7 @@ export default function CheckPage() {
       <div style={{ marginBottom: '2rem' }}>
         <h1 style={{ fontSize: '2rem', fontWeight: 700, marginBottom: '0.5rem' }}>Run a Scam Check</h1>
         <p style={{ color: '#94a3b8' }}>
-          Evaluate suspicious text messages, emails, phishing links, or upload a screenshot to inspect.
+          Evaluate suspicious text messages, emails, phishing links, or upload a screenshot. Every send is analyzed by the local LLM with RAG-based scam knowledge.
         </p>
       </div>
 
@@ -138,6 +149,32 @@ export default function CheckPage() {
           fontSize: '0.9rem'
         }}>
           <strong>Error:</strong> {error}
+        </div>
+      )}
+
+      {loading && (
+        <div style={{
+          background: 'rgba(59, 130, 246, 0.1)',
+          border: '1px solid rgba(59, 130, 246, 0.3)',
+          color: '#93c5fd',
+          padding: '0.85rem 1.25rem',
+          borderRadius: '0.5rem',
+          marginBottom: '1.5rem',
+          fontSize: '0.9rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.6rem'
+        }}>
+          <span style={{
+            width: '10px',
+            height: '10px',
+            borderRadius: '50%',
+            border: '2px solid rgba(147, 197, 253, 0.3)',
+            borderTopColor: '#93c5fd',
+            animation: 'spin 0.8s linear infinite',
+            display: 'inline-block'
+          }} />
+          {status || 'Working...'}
         </div>
       )}
 
@@ -198,8 +235,11 @@ export default function CheckPage() {
               className="cta-button"
               style={{ width: '100%', justifyContent: 'center', padding: '0.85rem', fontSize: '1rem', opacity: loading ? 0.7 : 1 }}
             >
-              {loading ? 'Evaluating via FastAPI...' : 'Analyze Content →'}
+              {loading ? 'Local AI is analyzing...' : 'Send to AI →'}
             </button>
+            <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.75rem', textAlign: 'center' }}>
+              Sent to the local Ollama LLM with RAG-retrieved scam patterns. Falls back to heuristics if the AI is offline.
+            </p>
           </form>
         </div>
       ) : (
@@ -226,7 +266,7 @@ export default function CheckPage() {
                 }}
               />
               <p style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.5rem' }}>
-                Images are sent to the FastAPI OCR engine (Tesseract) to extract text and analyze for fraud cues.
+                Text and links are extracted on the backend (OCR / local vision model), then the extracted content is sent to the LLM for risk analysis.
               </p>
             </div>
 
@@ -236,11 +276,11 @@ export default function CheckPage() {
               className="cta-button"
               style={{ width: '100%', justifyContent: 'center', padding: '0.85rem', fontSize: '1rem', opacity: loading ? 0.7 : 1 }}
             >
-              {loading ? 'Processing OCR & Analyzing...' : 'Upload & Scan Screenshot →'}
+              {loading ? 'Extracting & Analyzing...' : 'Send to AI →'}
             </button>
           </form>
         </div>
       )}
     </div>
   );
-}
+}

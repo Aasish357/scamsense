@@ -10,4 +10,12 @@
       - CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
       - SUPABASE_URL=${SUPABASE_URL:-}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY:-}
+      - AUTH_SECRET=${AUTH_SECRET:-}
+      - ADMIN_API_KEY=${ADMIN_API_KEY:-}
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-phi3:mini}
+      - OLLAMA_VISION_MODEL=${OLLAMA_VISION_MODEL:-moondream}
+      - OLLAMA_EMBED_MODEL=${OLLAMA_EMBED_MODEL:-nomic-embed-text:latest}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped

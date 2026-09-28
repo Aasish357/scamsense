@@ -6,7 +6,7 @@ ScamSense is a web application that helps ordinary people evaluate suspicious te
 
 > ScamSense is a decision-support tool. It does not guarantee safety or fraud, and it is not a substitute for verifying with the organization a message claims to be from.
 
-**Status:** Early-stage MVP. See [Implementation Status](#implementation-status) below — this README documents the target architecture, not a finished product.
+**Status:** The MVP is implemented for text/message analysis, passive URL analysis, screenshot extraction, local-AI explanations, auth with saved history, feedback/reports and a minimal admin console. Email, phone, QR, voice and billing are not implemented. The table below reflects the code, not a roadmap.
 
 ---
 
@@ -63,17 +63,17 @@ No account is required to run a check. Accounts are only needed to save history.
 
 | Capability | Status |
 |---|---|
-| Guest text/message analysis | 🚧 Milestone 1 |
-| Passive URL analysis (lexical, no active fetch) | 🚧 Milestone 1 |
-| Deterministic, versioned risk scoring | 🚧 Milestone 1 |
-| Screenshot upload + OCR | ⏳ Milestone 2 |
-| AI-assisted, evidence-grounded explanations | ⏳ Milestone 2 |
-| Brand verification registry | ⏳ Milestone 2 |
-| Isolated active URL fetching | ⏳ Milestone 2 (gated on security review) |
-| Auth (email + Google) & saved history | ⏳ Milestone 3 |
-| Reports, feedback, admin console | ⏳ Milestone 3 |
+| Guest text/message analysis | ✅ Implemented |
+| Passive URL analysis (lexical, no active fetch) | ✅ Implemented — structure, homoglyph/punycode, suspicious TLD, shortener, brand-lookalike checks |
+| Deterministic, versioned risk scoring | ✅ Implemented (`heuristic_index` / `local-1`; also the offline fallback for the AI path) |
+| Screenshot upload + OCR | ✅ Implemented — Tesseract when installed, local vision-model fallback |
+| AI-assisted, evidence-grounded explanations | ✅ Implemented — local Ollama + RAG over a scam-pattern corpus |
+| Brand verification registry | 🟡 Starter registry only (3 brands, backend route, no UI surface) |
+| Isolated active URL fetching | ⚠️ Not implemented — all URL analysis is passive/local |
+| Auth & saved history | ✅ Implemented — password auth, signed bearer tokens, per-user history |
+| Reports, feedback, admin console | ✅ Implemented — `POST /reports`, feedback, `/admin` behind `ADMIN_API_KEY` |
 | Billing | ❌ Not in MVP scope |
-| Email / phone / QR / voice analysis | ❌ Phase 2+ (not shown in UI until real) |
+| Email / phone / QR / voice analysis | ⚠️ Not implemented (Phase 2+; not shown in UI) |
 
 The home screen only ever exposes analysis modes that are actually implemented. A missing capability is disabled and disclosed — never simulated.
 
@@ -91,11 +91,13 @@ Input validation → Normalization → Entity extraction
 
 | Band | Score | Label |
 |---|---|---|
-| 0–20 | | Low Risk |
-| 21–40 | | Caution |
-| 41–60 | | Suspicious |
-| 61–80 | | High Risk |
-| 81–100 | | Very High Risk |
+| Score | Level |
+|---|---|
+| 0–19 | Low |
+| 20–49 | Caution |
+| 50–69 | Suspicious |
+| 70–84 | High |
+| 85–100 | Very high |
 
 Displayed as *"High Risk — 72/100 risk index"*, never as *"72% chance this is a scam."*
 
@@ -144,50 +146,35 @@ Design principles:
 
 | Layer | Choice |
 |---|---|
-| Frontend | Next.js, TypeScript, Tailwind CSS, shadcn/ui |
-| Backend | Python, FastAPI |
-| Database | PostgreSQL (Supabase) |
-| Auth | Supabase Auth (email + Google) |
-| Object storage | Private Supabase Storage |
-| AI | OpenAI, behind a provider abstraction |
-| Cache/Queue | Redis (only if/when justified) |
+| Frontend | Next.js (App Router), plain JavaScript, inline styles + global CSS |
+| Backend | Python 3.7+, FastAPI |
+| Database | PostgreSQL (Supabase) with in-memory fallback for local development |
+| Auth | Custom password auth (PBKDF2-SHA256) + HMAC-signed bearer tokens |
+| AI | Local Ollama (`phi3:mini` chat, `moondream` vision, `nomic-embed-text` embeddings) + RAG |
 | Frontend hosting | Vercel |
-| Backend hosting | Container / serverless (TBD) |
-| URL fetcher | Isolated execution boundary, separate from the main API |
+| Backend hosting | Container (Dockerfile installs Tesseract OCR) |
+| URL analysis | Passive/lexical only — no fetcher service exists |
 
 ## Repository Structure
 
 ```
 scamsense/
   apps/
-    web/                  # Next.js frontend (PWA shell)
-  services/
-    api/
-      app/
-        routes/
-        auth/
-        analysis/
-        risk/
-        providers/
-        security/
-    fetcher/               # Isolated active URL-fetch boundary
-  packages/
-    contracts/             # Shared API/type contracts
-    ui/                    # Shared UI components
+    web/
+      src/app/            # Next.js pages (/, /check, /history, /register, /feedback, /admin, /results/[id])
+      src/app/api/        # FastAPI backend (main.py + routers, risk engine, RAG, Ollama client)
+      src/lib/            # apiClient with token handling
+      tests/e2e/          # Playwright full-flow script (full_flow.js)
   supabase/
-    migrations/
-    seed/
+    migrations/           # users, analyses, feedback, reports, ownership columns
   tests/
-    unit/
-    integration/
-    e2e/
-    security/
-    evaluations/
+    unit/                 # pytest suite (API, auth/ownership, URL analysis, uploads, RAG)
   docs/
     product.md
     architecture.md
     security-privacy.md
     evaluation.md
+    deployment.md
   infrastructure/
 ```
 
@@ -196,16 +183,23 @@ scamsense/
 All endpoints are versioned under `/api/v1`.
 
 ```
-POST   /api/v1/analyze/text
-POST   /api/v1/analyze/url
-POST   /api/v1/analyze/image
+POST   /analyze                 # extract signals + links -> RAG retrieval -> local Ollama LLM
+POST   /check                   # deterministic heuristic analysis (used as offline fallback)
+POST   /screenshot              # image -> text/links via OCR or local vision model
+GET    /llm/health              # local Ollama availability and configured models
 
 GET    /api/v1/analyses/{analysis_id}
 DELETE /api/v1/analyses/{analysis_id}
 GET    /api/v1/me/analyses
 
 POST   /api/v1/reports
+POST   /reports
 POST   /api/v1/feedback
+
+POST   /register
+POST   /login
+
+GET    /admin/overview           # requires the x-admin-key header (ADMIN_API_KEY)
 ```
 
 Only endpoints backing implemented features are exposed — there are no placeholder routes that return fake results. Result payloads follow a shared TypeScript/Pydantic contract:
@@ -220,7 +214,7 @@ interface AnalysisResult {
   assessment_status: AssessmentStatus;
   risk_score: number | null;
   risk_level: RiskLevel | null;
-  score_kind: "heuristic_index";
+  score_kind: "heuristic_index" | "llm_rag_index";
   scoring_version: string;
   summary: string;
   signals: EvidenceSignal[];
@@ -234,7 +228,7 @@ interface AnalysisResult {
 
 ## Getting Started
 
-> Prerequisites: Node.js 20+, Python 3.11+, a Supabase project, and an OpenAI API key for full functionality. Core text/URL checks work without the AI key using deterministic detectors only.
+> Prerequisites: Node.js 20+, Python 3.7+ (3.11+ recommended), and optionally a Supabase project. For AI-assisted explanations, run a local [Ollama](https://ollama.com) server with the models listed under Environment Variables (`phi3:mini`, `moondream`, `nomic-embed-text`). Without Ollama, analysis falls back to deterministic heuristics.
 
 ```bash
 # 1. Clone
@@ -263,16 +257,21 @@ supabase db push             # applies migrations in supabase/migrations
 No secrets are committed. See `.env.example` in each app for the full list. At minimum:
 
 ```
-# apps/web
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-NEXT_PUBLIC_API_BASE_URL=
+# apps/web (frontend)
+NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
 
-# services/api
-DATABASE_URL=
+# Backend
+CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+SUPABASE_URL=                   # optional — falls back to in-memory storage when unset
 SUPABASE_SERVICE_ROLE_KEY=      # server-side only, never shipped to the client
-OPENAI_API_KEY=                 # optional — degrades to deterministic-only mode if unset
-THREAT_INTEL_API_KEY=           # optional — reputation checks disabled if unset
+AUTH_SECRET=                    # signs auth tokens; random per-process fallback when unset
+ADMIN_API_KEY=                  # enables /admin/overview; disabled (503) when unset
+
+# Local AI (optional — /analyze degrades to deterministic heuristics when offline)
+OLLAMA_HOST=http://127.0.0.1:11434
+OLLAMA_MODEL=phi3:mini
+OLLAMA_VISION_MODEL=moondream
+OLLAMA_EMBED_MODEL=nomic-embed-text:latest
 ```
 
 Missing credentials disable the dependent feature and surface an honest "unavailable" state — they never fall back to invented results.
@@ -280,29 +279,24 @@ Missing credentials disable the dependent feature and surface an honest "unavail
 ## Testing
 
 ```bash
-# Frontend
-cd apps/web && npm test
+# Backend unit/API tests (run from the repository root)
+python -m pytest tests
 
-# Backend
-cd services/api && pytest tests/unit tests/integration
-
-# End-to-end
-npm run test:e2e
-
-# Security suite (SSRF, auth, upload validation, prompt injection)
-pytest tests/security
+# End-to-end browser flow (Playwright)
+# Requires the backend on :8000 and the frontend on :3000
+cd apps/web && node tests/e2e/full_flow.js
 ```
 
-Detection quality (precision/recall/F1, false-positive/negative rate, abstention rate, latency, cost per analysis) is tracked separately from software correctness against a governed evaluation set — see `tests/evaluations/` and `docs/evaluation.md`.
+Detection quality (precision/recall/F1, false-positive/negative rate, latency, cost per analysis) is not yet measured — there is no evaluation harness in this repository. Scores are heuristic indices, not calibrated probabilities.
 
 ## Security & Privacy
 
-- Submitted URLs are treated as hostile: no active fetch until the isolated fetcher passes SSRF/DNS-rebinding tests; no JavaScript execution, form submission, or credential/cookie use; redirects and destinations are revalidated at connection time; cloud metadata and internal networks are blocked.
-- Suspicious URLs render as non-clickable text everywhere in the product.
-- Screenshots are validated by file signature (not extension), size- and dimension-bounded, stripped of metadata, stored privately, and deleted after processing.
-- Ownership is enforced server-side on every read/write/delete; guest access uses scoped, short-lived tokens rather than a bare analysis ID.
-- Raw message content, credentials, full URLs, and images are never written to logs or sent to analytics/session-replay tools.
-- Retention periods are defined per data type (uploads, guest results, saved analyses, reports, logs) and enforced with real deletion, not policy text alone.
+- URL analysis is passive and local: URLs are parsed and scored lexically (never fetched, no DNS lookups, no JavaScript execution, no page content retrieval).
+- Screenshot uploads are validated by file signature (not extension), size- and dimension-bounded, processed in memory, and never written to disk or object storage.
+- Ownership is enforced server-side: history lists only the signed-in user's analyses, and reads/deletes of owned records require the owner's bearer token. Guest analyses are readable by anyone holding the analysis id — a deliberate MVP limitation.
+- Auth tokens are HMAC-SHA256 signed with `AUTH_SECRET`, carry a 7-day expiry, and are rejected when tampered with or expired.
+- The admin console requires `ADMIN_API_KEY`; when unset the admin API responds 503 rather than being silently open.
+- Raw message content, credentials, and images are never written to logs by the application.
 
 Full threat model: `docs/security-privacy.md`.
 

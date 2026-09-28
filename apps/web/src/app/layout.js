@@ -20,6 +20,7 @@ export default function RootLayout({ children }) {
             <Link href="/check" className="nav-link">Check</Link>
             <Link href="/history" className="nav-link">History</Link>
             <Link href="/feedback" className="nav-link">Feedback</Link>
+            <Link href="/admin" className="nav-link">Admin</Link>
             <Link href="/register" className="nav-link">Account</Link>
             <Link href="/check" className="cta-button">Run Check</Link>
           </nav>

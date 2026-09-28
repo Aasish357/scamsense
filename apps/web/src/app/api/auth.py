@@ -1,10 +1,22 @@
+"""Authentication: account creation, login, and signed bearer tokens.
+
+Tokens are stateless HMAC-SHA256 signed payloads built with the standard
+library only, so the API gains no new dependencies. Configure AUTH_SECRET in
+production; a random per-process secret is the fallback (sessions then reset
+on restart, acceptable for local/dev use).
+"""
+from __future__ import annotations
+
 import base64
 import hashlib
 import hmac
+import json
 import os
+import time
+import uuid
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 try:
@@ -18,6 +30,8 @@ from .store import get_user, upsert_user
 router = APIRouter()
 
 _PASSWORD_ITERATIONS = 120000
+_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60
+_FALLBACK_SECRET = uuid.uuid4().bytes
 
 
 class User(BaseModel):
@@ -69,6 +83,56 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return False
 
 
+def _secret() -> bytes:
+    configured = os.getenv("AUTH_SECRET", "").strip()
+    if configured:
+        return configured.encode("utf-8")
+    return _FALLBACK_SECRET
+
+
+def create_token(username: str) -> str:
+    """Issue a signed token: base64url(payload).hex(hmac_sha256(payload))."""
+    payload = {"sub": username, "exp": int(time.time()) + _TOKEN_TTL_SECONDS}
+    raw = base64.urlsafe_b64encode(
+        json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    ).decode("ascii")
+    signature = hmac.new(_secret(), raw.encode("ascii"), hashlib.sha256).hexdigest()
+    return "{}.{}".format(raw, signature)
+
+
+def parse_token(token: str) -> Optional[str]:
+    """Return the username for a valid, unexpired token; otherwise None."""
+    try:
+        raw, signature = token.split(".", 1)
+        expected = hmac.new(_secret(), raw.encode("ascii"), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(signature, expected):
+            return None
+        payload = json.loads(base64.urlsafe_b64decode(raw.encode("ascii")).decode("utf-8"))
+        if int(payload.get("exp", 0)) < time.time():
+            return None
+        subject = payload.get("sub")
+        return subject if isinstance(subject, str) and subject else None
+    except Exception:
+        return None
+
+
+def get_optional_user(request: Request) -> Optional[str]:
+    """FastAPI dependency: username from ``Authorization: Bearer`` if present."""
+    header = request.headers.get("Authorization") or ""
+    if not header.lower().startswith("bearer "):
+        return None
+    token = header[7:].strip()
+    return parse_token(token) if token else None
+
+
+def require_user(request: Request) -> str:
+    """FastAPI dependency: 401 unless a valid token identifies a user."""
+    user = get_optional_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Sign in required.")
+    return user
+
+
 @router.post("/register")
 async def register_user(user: User):
     supabase = get_supabase()
@@ -101,10 +165,10 @@ async def login_user(user: LoginRequest):
         db_user = supabase.table("users").select("*").eq("username", user.username).execute()
         if not db_user.data or not verify_password(user.password, db_user.data[0]["hashed_password"]):
             raise HTTPException(status_code=400, detail="Incorrect username or password")
-        return {"msg": "Login successful!"}
+        return {"msg": "Login successful!", "token": create_token(user.username), "username": user.username}
 
     db_user = get_user(user.username)
     if not db_user or not verify_password(user.password, db_user["hashed_password"]):
         raise HTTPException(status_code=400, detail="Incorrect username or password")
 
-    return {"msg": "Login successful!"}
+    return {"msg": "Login successful!", "token": create_token(user.username), "username": user.username}

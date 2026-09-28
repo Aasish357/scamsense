@@ -15,7 +15,7 @@ export default function HistoryPage() {
       setAnalyses(data || []);
     } catch (err) {
       console.error('Error fetching history:', err);
-      setError(err.message || 'Failed to fetch history');
+      setError(err.status === 401 ? 'signin' : (err.message || 'Failed to fetch history'));
     } finally {
       setLoading(false);
     }
@@ -58,7 +58,18 @@ export default function HistoryPage() {
         </div>
       )}
 
-      {error && (
+      {error === 'signin' && (
+        <div className="card" style={{ textAlign: 'center', padding: '3rem 1.5rem' }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>🔒</div>
+          <h3 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '0.5rem' }}>History is saved to your account</h3>
+          <p style={{ color: '#94a3b8', marginBottom: '1.5rem' }}>
+            Sign in to see the analyses you have saved.
+          </p>
+          <Link href="/register" className="cta-button">Sign In</Link>
+        </div>
+      )}
+
+      {error && error !== 'signin' && (
         <div style={{
           background: 'rgba(239, 68, 68, 0.15)',
           border: '1px solid rgba(239, 68, 68, 0.3)',

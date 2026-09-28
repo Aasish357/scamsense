@@ -14,6 +14,8 @@ export default function ResultPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [reporting, setReporting] = useState(false);
+  const [reportDone, setReportDone] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -39,8 +41,24 @@ export default function ResultPage() {
       await apiRequest(`/analyses/${analysisId}`, 'DELETE');
       router.push('/history');
     } catch (err) {
-      alert(`Failed to delete: ${err.message}`);
+      alert(err.status === 401 ? 'Sign in to delete saved analyses.' : `Failed to delete: ${err.message}`);
       setDeleting(false);
+    }
+  };
+
+  const handleReport = async () => {
+    setReporting(true);
+    try {
+      await apiRequest('/reports', 'POST', {
+        analysis_id: analysisId,
+        reason: 'user_flagged_suspicious',
+        message: 'Flagged from the results page for admin review.',
+      });
+      setReportDone(true);
+    } catch (err) {
+      alert(`Failed to submit report: ${err.message}`);
+    } finally {
+      setReporting(false);
     }
   };
 
@@ -124,6 +142,8 @@ export default function ResultPage() {
           <div style={{ textAlign: 'right', fontSize: '0.85rem', color: '#64748b' }}>
             <div>Method: <strong>{result.score_kind || 'heuristic_index'}</strong></div>
             <div>Engine Version: <strong>{result.scoring_version || 'local-1'}</strong></div>
+            {result.llm_model ? <div>Local LLM: <strong>{result.llm_model}</strong></div> : null}
+            {result.engine === 'heuristic_fallback' && result.score_kind === 'heuristic_index' ? <div>AI offline - heuristic fallback used</div> : null}
           </div>
         </div>
 
@@ -149,6 +169,48 @@ export default function ResultPage() {
           </p>
         </div>
       </div>
+
+      {/* Extracted Links (from text or screenshot OCR) */}
+      {Array.isArray(result.extracted_links) && result.extracted_links.length > 0 && (
+        <div className="card">
+          <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '1rem' }}>
+            🔗 Extracted Links
+          </h3>
+          <ul style={{ paddingLeft: '1.25rem', color: '#cbd5e1', fontSize: '0.9rem' }}>
+            {result.extracted_links.map((link, idx) => (
+              <li key={idx} style={{ marginBottom: '0.35rem', wordBreak: 'break-all' }}>{link}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* RAG: knowledge retrieved from the local scam-pattern corpus */}
+      {Array.isArray(result.rag_context) && result.rag_context.length > 0 && (
+        <div className="card">
+          <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '0.35rem' }}>
+            🧠 Retrieved Knowledge (RAG)
+          </h3>
+          <p style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '1rem' }}>
+            Scam patterns matched against this content and fed to the local LLM as grounding context.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+            {result.rag_context.map((match, idx) => (
+              <div
+                key={idx}
+                style={{ background: '#0b0f19', padding: '0.9rem 1rem', borderRadius: '0.5rem', border: '1px solid var(--card-border)' }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.35rem' }}>
+                  <strong style={{ fontSize: '0.9rem', color: '#93c5fd' }}>{match.title}</strong>
+                  <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                    {match.category} · similarity {typeof match.score === 'number' ? match.score.toFixed(2) : match.score}
+                  </span>
+                </div>
+                <p style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>{match.text}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Evidence & Recommendation Breakdown */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
@@ -189,6 +251,26 @@ export default function ResultPage() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Report this analysis for admin review */}
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
+        <button
+          type="button"
+          onClick={handleReport}
+          disabled={reporting || reportDone}
+          style={{
+            padding: '0.6rem 1.5rem',
+            borderRadius: '0.5rem',
+            background: reportDone ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.1)',
+            border: '1px solid ' + (reportDone ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.3)'),
+            color: reportDone ? '#34d399' : '#f87171',
+            fontWeight: 600,
+            fontSize: '0.9rem'
+          }}
+        >
+          {reportDone ? '✓ Report submitted' : (reporting ? 'Submitting report...' : '🚩 Report this analysis')}
+        </button>
       </div>
 
       {/* Footer Actions */}
