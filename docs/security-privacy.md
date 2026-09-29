@@ -20,7 +20,7 @@ ScamSense ingests hostile input by design: the submitted text, email, URL or ima
 
 ## Access controls
 - HMAC-SHA256 signed bearer tokens (`AUTH_SECRET`), 7-day expiry, rejected when tampered with or expired.
-- Passwords hashed with bcrypt (passlib).
+- Passwords hashed with PBKDF2-HMAC-SHA256 (120,000 iterations, per-user salt) using only the standard library.
 - Per-user scoping on history, delete and report endpoints.
 - CORS restricted to a configured allowlist.
 

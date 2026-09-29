@@ -6,7 +6,7 @@ ScamSense is a web application that helps ordinary people evaluate suspicious te
 
 > ScamSense is a decision-support tool. It does not guarantee safety or fraud, and it is not a substitute for verifying with the organization a message claims to be from.
 
-**Status:** The MVP is implemented for text/message analysis, passive URL analysis, screenshot extraction, local-AI explanations, auth with saved history, feedback/reports and a minimal admin console. Phase 2 adds dedicated email/header analysis, phone-number risk signals and local QR decoding. Voice/deepfake analysis and billing are not implemented. The table below reflects the code, not a roadmap.
+**Status:** Shipped: text/URL analysis, passive lexical URL engine, screenshot extraction, email/header analysis, phone-number risk signals, local QR decoding, the Ask ScamSense assistant, an installable PWA with share-to-ScamSense, a browser extension, auth with saved history, feedback/reports and a minimal admin console. Not implemented: active URL fetching, regional languages, threat-intel feeds, voice/deepfake analysis and billing. The table below reflects the code, not a roadmap.
 
 ---
 
@@ -110,43 +110,47 @@ Displayed as *"High Risk — 72/100 risk index"*, never as *"72% chance this is 
 Rules that hold across the engine:
 
 - No evidence is not evidence of safety.
-- An unavailable provider is not a clean reputation result — it's missing coverage.
-- A failed analysis is an error state, never a zero (low-risk) score.
-- Results can be `complete`, `partial`, or `insufficient_evidence` (null score, null level).
-- Every signal carries an evidence classification: **Observed** (from submitted content or a completed check), **Reputation** (from an identified provider), or **Inference** (an interpretation of observed evidence) — and inferences are never presented as facts.
+- An unavailable provider is not a clean result — it is missing coverage, and the response says which engine actually ran (`engine`, `llm_model`).
+- A failed analysis is an error state, never a zero (low-risk) score: bad input returns 4xx, an undecodable QR returns 422, an empty share returns 400.
+- `assessment_status` is `complete` today; `partial` and `insufficient_evidence` are reserved values, not yet emitted.
+- Deterministic findings are always included in the evidence, even when the local model produced its own reasoning — the user always sees what the rules found.
 
 ## Architecture
 
 ```
-                         ┌─────────────────────┐
-                         │   apps/web (Next.js) │
-                         │  PWA shell, TS, Tailwind
-                         └──────────┬───────────┘
-                                    │ HTTPS / OpenAPI-typed client
-                         ┌──────────▼───────────┐
-                         │ services/api (FastAPI)│
-                         │  routes · auth · risk │
-                         │  analysis · providers │
-                         └───┬───────────┬───────┘
-              ┌──────────────┘           └───────────────┐
-   ┌──────────▼──────────┐                    ┌───────────▼────────────┐
-   │ services/fetcher     │                    │ AI provider interface   │
-   │ isolated URL fetch   │                    │ (OpenAI, constrained)   │
-   │ SSRF-hardened, no JS │                    │ extraction / explanation│
-   └──────────────────────┘                    └─────────────────────────┘
-                                    │
-                         ┌──────────▼───────────┐
-                         │ Supabase (Postgres)   │
-                         │ Auth · RLS · Storage   │
-                         └────────────────────────┘
+                 phone share sheet          browser toolbar
+                        |                        |
+                        v                        v
+        +---------------------------------------------+
+        |  apps/extension (MV3)  /  apps/web (Next.js PWA)   <- presentation
+        +---------------------------------------------+
+                        |  HTTPS (JSON / multipart)
+                        v
+        +---------------------------------------------+
+        |  apps/web/src/app/api  (FastAPI)                |
+        |  routes - auth - risk engine - analyzers        |
+        |  phone / email / QR / URL detectors - RAG       |
+        +----------------------+----------------------+
+                               |  http, localhost only
+                               v
+                    +----------------------+
+                    |  Local Ollama          |
+                    |  chat + vision + embed  |
+                    +----------------------+
+
+        +---------------------------------------------+
+        |  Supabase (Postgres) - analyses, users,       |
+        |  feedback, reports   |  in-memory fallback     |
+        +---------------------------------------------+
 ```
 
 Design principles:
 
-- **Modular monolith**, not microservices — one web app, one backend, with a separately isolated boundary for active URL fetching.
+- **Modular monolith**, not microservices: one web app whose `src/app/api` directory *is* the FastAPI backend, plus the extension and the service worker as thin clients of it.
 - **Risk logic is isolated** from API orchestration, AI providers, and presentation, so scoring stays deterministic and testable independent of the model.
-- **Untrusted input everywhere**: messages, URLs, fetched pages, screenshots, OCR output, and threat-feed text are all treated as hostile and never become model instructions.
-- **Fail closed**: unavailable dependencies produce explicit "unavailable" states, never substituted or invented results.
+- **Untrusted input everywhere**: messages, URLs, emails, screenshots, OCR output, QR payloads and the assistant's questions are all treated as hostile and never become model instructions.
+- **Fail closed**: unavailable dependencies produce explicit "unavailable" states, never substituted or invented results. When Ollama is offline the deterministic engine answers and the response says so.
+- **Local by default**: no hosted AI provider, no URL fetcher, no DNS lookups. The only outbound traffic is to an Ollama server the user runs.
 
 ## Tech Stack
 
@@ -166,15 +170,25 @@ Design principles:
 ```
 scamsense/
   apps/
+    extension/            # Manifest V3 browser extension (no build step)
+      background.js       #   service worker: context menus, /analyze call, badge
+      popup.*             #   verdict panel
     web/
-      src/app/            # Next.js pages (/, /check, /history, /register, /feedback, /admin, /results/[id])
-      src/app/api/        # FastAPI backend (main.py + routers, risk engine, RAG, Ollama client)
-      src/lib/            # apiClient with token handling
-      tests/e2e/          # Playwright full-flow script (full_flow.js)
+      public/             # manifest.webmanifest, sw.js, generated icons
+      src/app/            # Next.js pages (/, /check, /history, /register,
+                          #   /feedback, /admin, /offline, /results/[id], /share)
+      src/app/api/        # the FastAPI backend (main.py + routers, risk engine,
+                          #   URL/phone/email/QR analyzers, RAG, Ollama client)
+      src/lib/            # apiClient (token handling), shareTarget (IndexedDB)
+      tests/e2e/          # Playwright: full_flow.js, extension_check.js
+      requirements.txt    # backend dependencies (pillow, opencv-headless, ...)
   supabase/
-    migrations/           # users, analyses, feedback, reports, ownership columns
+    migrations/           # users, analyses, feedback, reports, LLM + modality columns
   tests/
-    unit/                 # pytest suite (API, auth/ownership, URL analysis, uploads, RAG)
+    unit/                 # pytest suite (API, auth/ownership, uploads, URL, phone,
+                          #   email, QR, assistant, RAG)
+  scripts/
+    generate_icons.py     # regenerates the PWA and extension icon sets
   docs/
     product.md
     architecture.md
@@ -186,7 +200,8 @@ scamsense/
 
 ## API
 
-All endpoints are versioned under `/api/v1`.
+Analysis and system routes are unversioned; the stored-record, account and
+reporting routes also answer under `/api/v1`.
 
 ```
 POST   /analyze                 # extract signals + links -> RAG retrieval -> local Ollama LLM
@@ -217,29 +232,31 @@ Only endpoints backing implemented features are exposed — there are no placeho
 
 ```ts
 type RiskLevel = "low" | "caution" | "suspicious" | "high" | "very_high";
-type AssessmentStatus = "complete" | "partial" | "insufficient_evidence";
+type Modality = "text" | "screenshot" | "email" | "qr";
 
+// The shape returned by /check, /screenshot, /analyze, /analyze/email,
+// /analyze/qr and /assistant/ask (mirrors the Pydantic models).
 interface AnalysisResult {
-  schema_version: string;
+  schema_version: string;          // "2026-09-28"
   analysis_id: string;
-  assessment_status: AssessmentStatus;
-  risk_score: number | null;
-  risk_level: RiskLevel | null;
+  assessment_status: string;       // "complete" today; "partial" / "insufficient_evidence" are reserved
+  risk_score: number;              // 0-100 heuristic index, never a probability
+  risk_level: RiskLevel;
   score_kind: "heuristic_index" | "llm_rag_index";
-  scoring_version: string;
+  scoring_version: string;         // e.g. "local-2" or "ollama-phi3:mini+rag-1"
   summary: string;
-  signals: EvidenceSignal[];
-  coverage: DetectorCoverage[];
-  recommended_actions: SafeAction[];
-  limitations: string[];
-  locale: string;
+  evidence: string | string[];     // deterministic findings are always included
+  recommendation: string | string[];
   created_at: string;
-  // Which input path produced this result. The /check, /screenshot, /analyze,
-  // /analyze/email and /analyze/qr routes all return this same shape.
-  modality: "text" | "screenshot" | "email" | "qr";
+  engine: "heuristic_fallback" | "ollama_rag";
+  llm_model: string;               // empty when the local AI was offline
+  modality: Modality;              // which input path produced this result
   extracted_links: string[];
   extracted_emails: string[];
   extracted_phones: string[];
+  rag_context?: { title: string; category: string; score: number; text: string }[];
+  qr_payloads?: string[];          // QR modality
+  email_findings?: object;         // email modality: header signals + parsed fields
 }
 ```
 
@@ -249,25 +266,31 @@ interface AnalysisResult {
 
 ```bash
 # 1. Clone
-git clone https://github.com/<your-org>/scamsense.git
+git clone https://github.com/Aasish357/scamsense.git
 cd scamsense
 
-# 2. Frontend
+# 2. Backend (FastAPI lives in apps/web/src/app/api)
+cd apps/web
+python -m venv .venv && .venv/Scripts/activate        # Windows; use source .venv/bin/activate on macOS/Linux
+pip install -r requirements.txt
+python -m uvicorn apps.web.src.app.main:app --port 8000 --reload
+# ...or, with Docker (adds Tesseract OCR):
+# docker compose up --build -d
+
+# 3. Frontend (in a second terminal)
 cd apps/web
 npm install
-cp .env.example .env.local   # fill in Supabase + API URL
+cp .env.example .env.local        # set NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
 npm run dev
 
-# 3. Backend (in a separate terminal)
-cd services/api
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env         # fill in DB, Supabase, provider keys
-uvicorn app.main:app --reload
+# 4. Database (optional - the app falls back to in-memory storage)
+supabase db push                  # applies every migration in supabase/migrations
 
-# 4. Database
-supabase db push             # applies migrations in supabase/migrations
+# 5. Browser extension (optional)
+#    chrome://extensions -> Developer mode -> Load unpacked -> apps/extension
 ```
+
+Regenerate the icon sets (PWA + extension) with `python scripts/generate_icons.py`.
 
 ## Environment Variables
 
@@ -301,10 +324,15 @@ python -m pytest tests
 
 # End-to-end browser flow (Playwright)
 # Requires the backend on :8000 and the frontend on :3000
-cd apps/web && node tests/e2e/full_flow.js
+cd apps/web && node tests/e2e/full_flow.js      # 11 steps, needs a local Ollama
+
+# Browser extension (loads the real MV3 extension into Chromium)
+cd apps/web && node tests/e2e/extension_check.js
 ```
 
-Detection quality (precision/recall/F1, false-positive/negative rate, latency, cost per analysis) is not yet measured — there is no evaluation harness in this repository. Scores are heuristic indices, not calibrated probabilities.
+Current baseline: **73 unit tests**, **11/11 E2E steps** and **5/5 extension checks** passing, with a live local Ollama (`phi3:mini`).
+
+Detection quality (precision/recall/F1, false-positive/negative rate, latency, cost per analysis) is **not** measured — there is no labelled-corpus evaluation harness in this repository yet. Scores are heuristic indices, not calibrated probabilities.
 
 ## Security & Privacy
 
