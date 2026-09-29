@@ -79,13 +79,51 @@ runtime libraries (`libgl1`, `libglib2.0-0`) and `tesseract-ocr`.
 
 ## 3. Frontend Deployment (Vercel)
 
-1. Import the repository into [Vercel](https://vercel.com).
-2. Set the **Root Directory** to `apps/web` (or keep root with `vercel.json`).
-3. Add Environment Variables in Project Settings:
-   - `NEXT_PUBLIC_API_BASE_URL`: URL of the deployed FastAPI backend (e.g. `https://scamsense-api.onrender.com`).
-   - `NEXT_PUBLIC_SUPABASE_URL`: Supabase Project URL.
+> Vercel hosts the **Next.js frontend only**. The FastAPI backend cannot run on
+> Vercel (it needs a long-running ASGI server), so deploy section 2 first and
+> point the frontend at it. Order matters: without a backend URL the UI still
+> loads, but every check reports the API as offline.
+
+1. Import the repository into [Vercel](https://vercel.com) and pick the
+   `scamsense` project.
+2. **Set the Root Directory to `apps/web`.** This is the one setting that
+   matters: the Next.js app lives in `apps/web`, so Vercel must look there.
+   Leave "Framework Preset" on *Next.js* (auto-detected) and the build/install
+   commands at their defaults (`npm install`, `npm run build`).
+   There is deliberately **no** `vercel.json` at the repository root: pointing
+   Vercel at the root would look for a Next.js app that does not exist there.
+3. Add Environment Variables under *Project Settings > Environment Variables*
+   (add them for **Production**, **Preview** and **Development**):
+   - `NEXT_PUBLIC_API_BASE_URL`: the deployed backend URL, e.g.
+     `https://scamsense-api.onrender.com` (no trailing slash).
+   - `NEXT_PUBLIC_SUPABASE_URL`: Supabase Project URL (optional - without it
+     history stays in memory and is lost on restart).
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Supabase Anonymous Public Key.
-4. Deploy.
+4. Deploy. The build runs `npm install && npm run build` inside `apps/web` and
+   the app is served at `https://<project>.vercel.app`.
+5. Back on the backend (Render/Railway), set `CORS_ORIGINS` to the Vercel URL so
+   the browser is allowed to call it:
+
+   ```
+   CORS_ORIGINS=https://<project>.vercel.app
+   ```
+
+6. Smoke test the live deployment: open the app, run one clearly benign message
+   (expect *low* / 0) and one obvious phishing string (expect a high score and
+   named evidence). If the header shows "FastAPI Backend: offline", the URL or
+   CORS is wrong.
+
+### Deploying from the CLI instead
+
+```bash
+cd apps/web
+npx vercel --prod --token "$VERCEL_TOKEN"     # production
+npx vercel --token "$VERCEL_TOKEN"             # preview
+```
+
+A token is created in Vercel under *Settings > Tokens*. The Vercel CLI is not
+installed in this environment, so CLI deploys need `npx` (which downloads it) or
+a global `npm i -g vercel`.
 
 ### CORS Configuration Note
 Ensure the backend's `CORS_ORIGINS` environment variable includes your production Vercel domain without trailing slashes:
