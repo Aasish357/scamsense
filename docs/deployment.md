@@ -19,7 +19,8 @@ This document describes how to deploy the **ScamSense** stack to production.
    # If using Supabase CLI
    supabase db push
    ```
-   Or paste each file into the SQL Editor and execute them in sequence:
+   Or paste the single combined script into the SQL Editor and run it once:
+   - supabase/COMBINED_SCHEMA.sql (all four migrations, in dependency order, safe to re-run)
    - `20260928000001_init.sql` - core tables and RLS policies
    - `20260928000002_analysis_llm_fields.sql` - LLM/RAG analysis columns
    - `20260928000003_auth_ownership_and_reports.sql` - ownership and reports

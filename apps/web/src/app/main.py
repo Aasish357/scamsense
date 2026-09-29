@@ -1,3 +1,4 @@
+import logging
 import os
 
 from fastapi import FastAPI
@@ -17,16 +18,28 @@ from .api.screenshot import router as screenshot_router
 
 app = FastAPI()
 
+# An unset CORS_ORIGINS falls back to local development origins. An empty value
+# produces an empty allow-list on purpose (fail closed), which is a common
+# deployment surprise, so the effective list is logged at startup.
+_allowed_origins = [
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:3000,http://127.0.0.1:3000",
+    ).split(",")
+    if origin.strip()
+]
+if not _allowed_origins:
+    logging.getLogger("scamsense").warning(
+        "CORS_ORIGINS is empty: every browser origin will be blocked. Set it to "
+        "your frontend origin, e.g. https://your-app.vercel.app"
+    )
+else:
+    logging.getLogger("scamsense").info("CORS origins allowed: %s", _allowed_origins)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        origin.strip()
-        for origin in os.getenv(
-            "CORS_ORIGINS",
-            "http://localhost:3000,http://127.0.0.1:3000",
-        ).split(",")
-        if origin.strip()
-    ],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
