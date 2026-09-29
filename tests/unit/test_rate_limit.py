@@ -1,4 +1,4 @@
-﻿"""Tests for the public rate limiter."""
+"""Tests for the public rate limiter."""
 
 import os
 import sys

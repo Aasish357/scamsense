@@ -1,4 +1,4 @@
-﻿"""Tests for the evaluation harness and the detector-code registry.
+"""Tests for the evaluation harness and the detector-code registry.
 
 The harness is the only thing standing between "we changed a detector" and
 "nobody noticed the precision collapsed", so the corpus and the baseline are
