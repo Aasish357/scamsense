@@ -101,12 +101,13 @@ def analyze_qr(image_bytes: bytes) -> Dict:
                 signals.append("QR link decodes to {}".format(payload))
             continue
         if lowered.startswith("mailto:"):
+            # Informational only: a contact card is not evidence of a scam, so
+            # it must not inherit the QR base score (the harness caught a
+            # business-card QR scoring 50/100).
             signals.append("QR payload opens an email compose window ({})".format(payload[:60]))
-            delta += 10
             continue
         if lowered.startswith("tel:"):
             signals.append("QR payload dials a phone number ({})".format(payload[:60]))
-            delta += 10
             continue
         signals.append("QR payload is plain text: {}".format(payload[:120]))
 

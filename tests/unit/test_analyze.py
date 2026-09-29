@@ -30,14 +30,17 @@ def test_analyze_falls_back_to_heuristics_when_ollama_offline(monkeypatch):
     assert payload["engine"] == "heuristic_fallback"
     assert payload["llm_model"] == ""
     assert payload["score_kind"] == "heuristic_index"
-    assert payload["risk_score"] == 70
-    assert payload["risk_level"] == "high"
+    # A bare http:// link is a weak signal ("caution"), not "high" risk: the
+    # evaluation harness showed the old 70-point placeholder flagged ordinary
+    # messages, so scoring is now driven only by what a detector found.
+    assert payload["risk_score"] == 45
+    assert payload["risk_level"] == "caution"
     assert payload["extracted_links"] == ["http://example.com"]
     assert payload["rag_context"] == []
 
     stored = client.get("/analyses/{}".format(payload["analysis_id"]))
     assert stored.status_code == 200
-    assert stored.json()["risk_score"] == 70
+    assert stored.json()["risk_score"] == 45
 
 
 def test_analyze_uses_llm_and_rag_when_available(monkeypatch):
@@ -97,7 +100,7 @@ def test_analyze_recovers_when_llm_returns_garbage(monkeypatch):
     payload = response.json()
     assert payload["engine"] == "heuristic_fallback"
     assert payload["score_kind"] == "heuristic_index"
-    assert payload["risk_score"] == 70
+    assert payload["risk_score"] == 45
     # RAG context is still reported even though the LLM failed.
     assert payload["rag_context"][0]["category"] == "phishing"
 

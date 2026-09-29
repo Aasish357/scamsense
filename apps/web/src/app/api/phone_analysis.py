@@ -68,8 +68,8 @@ def _country_code(number: str) -> str:
 
 def _premium_rate(number: str) -> bool:
     digits = number.lstrip("+")
-    # US/Canada 1-900, UK 09xx, Germany 0900 and Australia 190x premium services.
-    premium_prefixes = ("1900", "900", "449", "49900", "6119")
+    # US/Canada 1-900, UK 09xx and 090x, Germany 0900 and Australia 190x.
+    premium_prefixes = ("1900", "900", "090", "449", "49900", "6119")
     return any(digits.startswith(prefix) for prefix in premium_prefixes)
 
 

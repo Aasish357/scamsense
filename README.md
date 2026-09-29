@@ -74,6 +74,7 @@ No account is required to run a check. Accounts are only needed to save history.
 | Ask ScamSense assistant | ✅ Implemented — follow-up questions answered from the stored analysis + retrieved patterns; never sees the original message |
 | Installable PWA + share-to-ScamSense | ✅ Implemented — web app manifest, icons, offline page, and a share target that accepts text, links and images |
 | Browser extension (MV3) | ✅ Implemented — check a selection, link or page from the context menu; toolbar badge shows the risk score |
+| Evaluation harness | ✅ Implemented — labelled corpus, per-detector precision/recall/F1, end-to-end false-alarm rate, gated in CI |
 | Brand verification registry | 🟡 Starter registry only (3 brands, backend route, no UI surface) |
 | Isolated active URL fetching | ⚠️ Not implemented — all URL analysis is passive/local |
 | Auth & saved history | ✅ Implemented — password auth, signed bearer tokens, per-user history |
@@ -322,6 +323,11 @@ Missing credentials disable the dependent feature and surface an honest "unavail
 # Backend unit/API tests (run from the repository root)
 python -m pytest tests
 
+# Evaluation harness: per-detector precision/recall/F1 + end-to-end metrics
+python scripts/evaluate.py                     # full report
+python scripts/evaluate.py --update-baseline   # accept the current numbers
+python scripts/evaluate.py --external          # also score datasets in corpus/external/
+
 # End-to-end browser flow (Playwright)
 # Requires the backend on :8000 and the frontend on :3000
 cd apps/web && node tests/e2e/full_flow.js      # 11 steps, needs a local Ollama
@@ -330,9 +336,24 @@ cd apps/web && node tests/e2e/full_flow.js      # 11 steps, needs a local Ollama
 cd apps/web && node tests/e2e/extension_check.js
 ```
 
-Current baseline: **73 unit tests**, **11/11 E2E steps** and **5/5 extension checks** passing, with a live local Ollama (`phi3:mini`).
+Current baseline: **84 unit tests**, **11/11 E2E steps** and **5/5 extension checks** passing, with a live local Ollama (`phi3:mini`).
 
-Detection quality (precision/recall/F1, false-positive/negative rate, latency, cost per analysis) is **not** measured — there is no labelled-corpus evaluation harness in this repository yet. Scores are heuristic indices, not calibrated probabilities.
+**Measured detector quality** over the committed 90-sample labelled corpus
+(`corpus/`, see `docs/evaluation-report.md`):
+
+| Metric | Value |
+|---|---|
+| Scam detection rate | 100% (40/40) |
+| False-alarm rate on benign | 0% (0/50) |
+| Benign samples scoring >= 50 | 0% |
+| Mean risk index, scam / benign | 78.5 / 2.3 |
+| Median latency per sample | ~0.1 ms text, 0.3 ms email, ~22 ms QR (encode+decode) |
+
+The corpus is deliberately synthetic and every host in it is unroutable
+(`.example`/`.test`/`.invalid`), so these numbers measure **the detectors**, not
+the difficulty of real-world scams, and they are *not* a claim about live
+accuracy. `.github/workflows/evaluation.yml` fails the build when any of these
+metrics regress against `corpus/baseline.json`.
 
 ## Security & Privacy
 

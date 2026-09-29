@@ -46,10 +46,14 @@ HOMOGLYPH_MAP = {
 }
 
 _LEET_MAP = str.maketrans({"0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t"})
+# "1" is also commonly swapped for "l" (paypa1 -> paypal), which the map above
+# cannot express, so a second substitution is checked before giving up.
+_LEET_MAP_ALT = str.maketrans({"0": "o", "1": "l", "3": "e", "4": "a", "5": "s", "7": "t"})
 
 _SENSITIVE_PATH_WORDS = (
-    "login", "signin", "verify", "secure", "account", "update", "confirm",
-    "password", "unlock", "suspend", "billing", "wallet", "otp", "claim",
+    "login", "signin", "sign-in", "verify", "verification", "secure", "account",
+    "update", "confirm", "password", "reset", "recover", "restore", "unlock",
+    "suspend", "billing", "wallet", "otp", "claim", "authorize", "signin",
 )
 
 BASE_URL_SCORE = 40
@@ -149,7 +153,8 @@ def analyze_url(url: str) -> Dict:
         if registrable in official or host in official:
             continue
         leet_host = host.translate(_LEET_MAP)
-        if brand in leet_host:
+        leet_host_alt = host.translate(_LEET_MAP_ALT)
+        if brand in leet_host or brand in leet_host_alt:
             if brand in host:
                 signals.append("brand '{}' referenced from a non-official domain".format(brand))
                 delta += 40
@@ -173,7 +178,10 @@ def analyze_url(url: str) -> Dict:
     hit_words = [word for word in _SENSITIVE_PATH_WORDS if word in path_words]
     if hit_words:
         signals.append("credential-themed path ({})".format(", ".join(sorted(set(hit_words))[:4])))
-        delta += 10
+        # Weak on its own: plenty of legitimate pages use /login or /reset, so
+        # this informs the score without pushing a first-party link into
+        # "suspicious" territory by itself.
+        delta += 5
 
     delta = min(95, delta)
     return {"url": raw, "signals": signals, "score_delta": delta}

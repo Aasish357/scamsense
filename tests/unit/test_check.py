@@ -21,10 +21,14 @@ def auth_headers():
 @pytest.mark.parametrize(
     "content, expected_score, expected_evidence, expected_level",
     [
-        ("This is a message about ExampleBrand.", 10, "Trusted brand detected.", "low"),
+        # Scoring is detector-driven: naming a brand we trust is informational
+        # (0), and a plain-http link on a real domain is a weak signal (the
+        # evaluation harness replaced the old "any URL = 70" placeholder).
+        ("This is a message about ExampleBrand.", 0, "Trusted brand detected.", "low"),
         ("This is a message about TestBrand.", 50, "Untrusted brand detected.", "suspicious"),
-        ("No brand mentioned here.", 0, "Content appears to be normal text.", "low"),
-        ("Please open http://example.com now.", 70, "Detected a URL in the content.", "high"),
+        ("No brand mentioned here.", 0, "No notable risk signals detected.", "low"),
+        ("Please open https://www.example.com now.", 0, "Link structure looks ordinary", "low"),
+        ("Please open http://example.com now.", 45, "non-HTTPS link", "caution"),
     ],
 )
 def test_analyze_content(content, expected_score, expected_evidence, expected_level):

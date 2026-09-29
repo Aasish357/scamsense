@@ -1,0 +1,36 @@
+name: evaluation
+
+# The evaluation harness is the guard rail for the detectors: it fails the build
+# when precision, recall or the end-to-end false-alarm rate regress against the
+# committed baseline. It is offline and free - no services, no secrets.
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r apps/web/requirements.txt
+
+      - name: Run the unit suite
+        run: python -m pytest tests -q
+
+      - name: Run the evaluation harness
+        run: python scripts/evaluate.py --report
+
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evaluation-report
+          path: docs/evaluation-report.md

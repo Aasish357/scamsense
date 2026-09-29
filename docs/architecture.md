@@ -38,6 +38,8 @@ input (text/URL | screenshot | raw email | QR image)
 | `api/screenshot.py` | upload validation, OCR / vision transcription, QR decode |
 | `api/modalities.py` | `/analyze/email`, `/analyze/email/upload`, `/analyze/email/findings`, `/analyze/qr` |
 | `api/assistant.py` | `/assistant/ask` - grounded follow-up questions over a stored analysis |
+| `api/signal_codes.py` | stable detector codes behind every human-readable signal |
+| `api/text_signals.py` | payment URIs (`upi://`, `bitcoin:`) and `tel:` links in plain text |
 | `api/extraction.py` | link, email and phone extraction/normalization |
 | `api/auth.py`, `api/store.py` | HMAC-signed tokens, ownership rules, Supabase/in-memory persistence |
 | `api/rag.py`, `api/ollama_client.py` | local retrieval and model client |

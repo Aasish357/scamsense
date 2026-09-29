@@ -11,6 +11,7 @@ from .brand import BRAND_REGISTRY
 from .extraction import extract_links
 from .phone_analysis import PHONE_BASE_SCORE, analyze_phones
 from .store import create_analysis, utc_now_iso
+from .text_signals import BASE_TEXT_SCORE, analyze_text_signals
 from .url_analysis import BASE_URL_SCORE, analyze_urls
 
 router = APIRouter()
@@ -58,10 +59,13 @@ def _build_summary(evidence: str, recommendation: str) -> str:
 
 
 def assess_content_heuristically(content: str) -> dict:
-    """Deterministic keyword/URL heuristics.
+    """Deterministic detectors, shared by ``/check`` and the offline LLM fallback.
 
-    Shared by the ``/check`` endpoint and as the offline fallback for the
-    LLM + RAG ``/analyze`` pipeline when the local Ollama server is down.
+    Scoring is **detector-driven**: the base index reflects only what a detector
+    actually found. Message length and the mere presence of a link are not risk
+    signals - the evaluation harness (``scripts/evaluate.py``) showed the
+    earlier placeholder rules scoring 41% of benign messages as suspicious, so
+    they were removed in favour of honest, evidence-linked scores.
     """
     risk_score = 0
     evidence_parts = []
@@ -70,25 +74,11 @@ def assess_content_heuristically(content: str) -> dict:
     for brand_name in _BRAND_CANDIDATES:
         if brand_name in content:
             if BRAND_REGISTRY.get(brand_name):
-                risk_score += 10
                 evidence_parts.append("Trusted brand detected.")
             else:
-                risk_score += 50
+                risk_score = max(risk_score, 50)
                 evidence_parts.append("Untrusted brand detected.")
             break
-
-    if len(content) > 100:
-        risk_score = max(risk_score, 50)
-        evidence_parts.append("Content length suggests caution.")
-        recommendation = "Consider shortening the message."
-    elif "http" in content:
-        risk_score = max(risk_score, 70)
-        evidence_parts.append("Detected a URL in the content.")
-        recommendation = "Verify the URL before clicking."
-    else:
-        risk_score = max(risk_score, 0)
-        evidence_parts.append("Content appears to be normal text.")
-        recommendation = "No immediate action required."
 
     # Passive lexical URL analysis: parse-only, never fetches. The suggested
     # score can raise (never lower) the risk determined above.
@@ -102,6 +92,11 @@ def assess_content_heuristically(content: str) -> dict:
                 )
         if scan["score_delta"]:
             risk_score = min(95, max(risk_score, BASE_URL_SCORE + scan["score_delta"]))
+            recommendation = "Verify the link before clicking it."
+        else:
+            evidence_parts.append(
+                "Link structure looks ordinary ({} link(s) found).".format(len(links))
+            )
 
     # Phone number signals: premium-rate lines, brand/country mismatch,
     # messaging-app routing and pressure to call back.
@@ -113,6 +108,20 @@ def assess_content_heuristically(content: str) -> dict:
             )
     if phone_scan["score_delta"]:
         risk_score = min(95, max(risk_score, PHONE_BASE_SCORE + phone_scan["score_delta"]))
+        recommendation = "Do not call back until you verify the number on the official site."
+
+    # Payment URIs (upi://, bitcoin:) and tel: links are neither URLs nor
+    # dialable numbers, so they need their own pass over the raw text.
+    text_scan = analyze_text_signals(content)
+    for signal in text_scan["signals"]:
+        evidence_parts.append("Text signal: {}.".format(signal))
+    if text_scan["score_delta"]:
+        risk_score = min(95, max(risk_score, BASE_TEXT_SCORE + text_scan["score_delta"]))
+        recommendation = "Do not scan or pay until you verify it inside the official app."
+
+    if risk_score == 0 and not evidence_parts:
+        evidence_parts.append("No notable risk signals detected.")
+        recommendation = "No immediate action required."
 
     return {
         "risk_score": risk_score,
