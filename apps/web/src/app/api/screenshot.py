@@ -20,6 +20,7 @@ from pydantic import BaseModel
 from . import ollama_client
 from .extraction import extract_links
 from .rate_limit import enforce_rate_limit
+from .ocr_repair import repair_urls
 from .qr_analysis import decode_qr_payloads
 
 try:
@@ -68,6 +69,7 @@ class ScreenshotAnalysisResult(BaseModel):
     links: List[str] = []
     extraction_method: str = "fallback"
     qr_payloads: List[str] = []
+    recovered_links: List[str] = []
     warnings: List[str] = []
 
 
@@ -150,6 +152,14 @@ def analyze_screenshot(
 
     extracted_text = _ocr_with_tesseract(image_data)
     method = "tesseract_ocr" if extracted_text else ""
+    recovered_links: List[str] = []
+    if extracted_text:
+        # OCR routinely shreds URLs ("http: //paypal-verrify. example login").
+        # Left alone, the risk engine sees no link at all and a phishing
+        # screenshot can score as harmless, so the link is rebuilt first.
+        repaired, recovered_links = repair_urls(extracted_text)
+        if recovered_links:
+            extracted_text = repaired
 
     if not extracted_text:
         extracted_text = _transcribe_with_vision(image_data)
@@ -188,5 +198,6 @@ def analyze_screenshot(
         links=extract_links(extracted_text),
         extraction_method=method,
         qr_payloads=qr_payloads,
+        recovered_links=recovered_links,
         warnings=warnings,
     )
