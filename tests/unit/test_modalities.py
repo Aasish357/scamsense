@@ -307,3 +307,32 @@ def test_email_findings_are_kept_when_the_llm_answers(monkeypatch):
     # produced its own evidence list.
     assert payload["evidence"][0].startswith("SPF authentication failed")
     assert "Lookalike domain" in payload["evidence"]
+
+
+# --- regression tests for edge cases found during the robustness pass ------
+
+
+def test_parenthesised_phone_formats_are_extracted():
+    assert extract_phone_numbers("Dial +1 (415) 555-2671 today") == ["+14155552671"]
+    assert extract_phone_numbers("(415) 555-2671") == ["4155552671"]
+    assert extract_phone_numbers("Reach us: 020 7946 0958") == ["02079460958"]
+
+
+def test_order_ids_are_not_treated_as_cheap_phone_numbers():
+    result = analyze_phones("Order 12345678 shipped to ZIP 90210")
+    assert result["numbers"] == ["12345678"]
+    assert result["score_delta"] == 0
+
+
+def test_body_only_paste_invents_no_header_findings():
+    result = analyze_email("hey, are we still meeting tomorrow for coffee?")
+    assert result["signals"] == []
+    assert result["suggested_score"] == 0
+    assert analyze_email("")["signals"] == []
+
+
+def test_header_only_message_reports_structure_without_driving_the_score():
+    result = analyze_email("From: a@b.com\nSubject: hi\n")
+    assert "missing Message-ID header" in result["signals"]
+    # Structural gaps alone must never push a forwarded email into high risk.
+    assert result["suggested_score"] == 0

@@ -104,6 +104,9 @@ def analyze_email(raw: str) -> Dict:
     from_addr = _address(headers.get("From", ""))
     reply_to = _address(headers.get("Reply-To", ""))
     return_path = _address(headers.get("Return-Path", ""))
+    # A body-only paste has no headers at all; header-shaped findings must not
+    # be invented for input that was never an email message.
+    has_headers = bool(headers)
 
     # --- sender authentication ---------------------------------------------
     verdicts = _auth_verdicts(headers.get("Authentication-Results", ""))
@@ -112,9 +115,9 @@ def analyze_email(raw: str) -> Dict:
         for token in re.findall(r"spf=([a-z]+)", spf_header):
             verdicts.setdefault("spf", token)
 
-    if not headers.get("Authentication-Results"):
+    if has_headers and not headers.get("Authentication-Results"):
         signals.append("no Authentication-Results header (SPF/DKIM/DMARC unverifiable)")
-        delta += 10
+        delta += 5
     for mechanism in ("spf", "dkim", "dmarc"):
         verdict = verdicts.get(mechanism)
         if verdict in _AUTH_FAIL_VALUES:
@@ -182,18 +185,21 @@ def analyze_email(raw: str) -> Dict:
                 delta += 10
 
     # --- message structure --------------------------------------------------
-    if not headers.get("Message-ID"):
-        signals.append("missing Message-ID header")
-        delta += 10
-    if parsed["received_hops"] == 0:
-        signals.append("no Received headers (delivery path unverifiable)")
-        delta += 10
-    elif parsed["received_hops"] > 6:
-        signals.append("unusually long delivery path ({} hops)".format(parsed["received_hops"]))
-        delta += 10
+    # Structural gaps are observations, not proof: they appear in the evidence
+    # but stay below the weight that would move the score on their own.
+    if has_headers:
+        if not headers.get("Message-ID"):
+            signals.append("missing Message-ID header")
+            delta += 5
+        if parsed["received_hops"] == 0:
+            signals.append("no Received headers (delivery path unverifiable)")
+            delta += 5
+        elif parsed["received_hops"] > 6:
+            signals.append("unusual delivery path ({} hops)".format(parsed["received_hops"]))
+            delta += 10
     if parsed["html_only"]:
         signals.append("HTML-only body with no plain-text alternative")
-        delta += 10
+        delta += 5
 
     weak_findings = delta < 20
     return {

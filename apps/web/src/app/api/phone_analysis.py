@@ -85,7 +85,10 @@ def analyze_phone_number(number: str, context: str) -> Dict:
         signals.append("premium-rate number (high per-minute charge)")
         delta += 35
 
-    pattern = _has_repeated_or_sequential_pattern(digits)
+    # Cheap-dial patterns only count on numbers that are actually dialable: an
+    # 8-digit "12345678" is far more often an order id than a phone number.
+    looks_like_phone = normalized.startswith("+") or len(digits) >= 10
+    pattern = _has_repeated_or_sequential_pattern(digits) if looks_like_phone else ""
     if pattern:
         signals.append("number uses a {} pattern".format(pattern))
         delta += 20
