@@ -182,13 +182,29 @@ export default function CheckPage() {
       }
 
       const screenshotResult = await res.json();
-      const extractedText = screenshotResult.extracted_text || '';
+      const extractedText = (screenshotResult.extracted_text || '').trim();
+      const warnings = screenshotResult.warnings || [];
+
+      if (!extractedText) {
+        // Nothing was readable. Analysing an empty message would return a low
+        // risk score, which reads as "this screenshot is safe" - the opposite
+        // of what an unreadable image means.
+        setError(
+          warnings[0] ||
+            'No text could be read from that image. Paste the message text instead.'
+        );
+        setLoading(false);
+        setStatus('');
+        return;
+      }
+      if (warnings.length) setNotice(warnings[0]);
 
       // Step 2: send the extracted content to the LLM + RAG pipeline.
       setStatus('Sending extracted content to the local AI engine...');
       const checkResult = await apiRequest('/analyze', 'POST', {
-        content: extractedText || 'Uploaded screenshot with no readable text',
+        content: extractedText,
         question: 'Analyze this screenshot for scam signals',
+        modality: 'screenshot',
       });
 
       if (checkResult?.analysis_id) {

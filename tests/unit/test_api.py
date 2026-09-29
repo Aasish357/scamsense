@@ -37,7 +37,7 @@ def test_health_and_brand_endpoints():
     assert unknown_brand.status_code == 404
 
 
-def test_screenshot_analysis_uses_fallback_text_when_needed():
+def test_screenshot_analysis_reports_when_no_text_can_be_read():
     sample_png = b64decode(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4//8/AwAI/AL+X4n3NwAAAABJRU5ErkJggg=="
     )
@@ -47,7 +47,11 @@ def test_screenshot_analysis_uses_fallback_text_when_needed():
     )
     assert response.status_code == 200
     payload = response.json()
-    assert payload["extracted_text"]
+    # Inventing placeholder text here would be analysed as a harmless message
+    # and reported as low risk, so an empty result is returned with a warning.
+    assert payload["extracted_text"] == ""
+    assert payload["extraction_method"] == "unavailable"
+    assert payload["warnings"]
     assert payload["recommendations"] == "Analyze the content for suspicious patterns."
 
 

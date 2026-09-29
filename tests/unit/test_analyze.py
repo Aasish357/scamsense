@@ -149,7 +149,13 @@ def test_rag_retrieval_ranks_most_similar_document_first(monkeypatch):
     assert {"title", "category", "text", "score"} <= set(results[0].keys())
 
 
-def test_screenshot_endpoint_returns_links_and_method():
+def test_screenshot_endpoint_returns_links_and_method(monkeypatch):
+    from apps.web.src.app.api import screenshot as screenshot_module
+
+    # Pin the environment: neither OCR nor the local vision model is assumed.
+    monkeypatch.setattr(screenshot_module, "_ocr_with_tesseract", lambda data: "")
+    monkeypatch.setattr(screenshot_module, "_transcribe_with_vision", lambda data: "")
+
     from base64 import b64decode
     from io import BytesIO
 
@@ -163,10 +169,12 @@ def test_screenshot_endpoint_returns_links_and_method():
     assert response.status_code == 200
 
     payload = response.json()
-    # Tiny fixtures skip the vision model and land on the deterministic fallback.
-    assert payload["extraction_method"] == "fallback"
+    # Nothing is readable in a 1x1 PNG and no OCR/vision engine is available
+    # here, so the endpoint must say so rather than invent placeholder text.
+    assert payload["extraction_method"] == "unavailable"
+    assert payload["extracted_text"] == ""
     assert payload["links"] == []
-    assert payload["extracted_text"]
+    assert payload["warnings"], "an unreadable image must produce an explicit warning"
 
 
 def test_llm_health_endpoint_reports_configuration():

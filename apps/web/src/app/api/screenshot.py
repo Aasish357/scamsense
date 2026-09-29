@@ -68,6 +68,7 @@ class ScreenshotAnalysisResult(BaseModel):
     links: List[str] = []
     extraction_method: str = "fallback"
     qr_payloads: List[str] = []
+    warnings: List[str] = []
 
 
 def _detect_image_format(image_data: bytes) -> str:
@@ -162,9 +163,22 @@ def analyze_screenshot(
         extracted_text = (extracted_text + "\n" + qr_text).strip() if extracted_text else qr_text
         method = "{}+qr_decode".format(method) if method else "qr_decode"
 
+    # No placeholder text is invented here: analysing "sample extracted text"
+    # would score 0 and could be read as "this screenshot is safe". An empty
+    # result plus an explicit warning is the honest answer, and it keeps the
+    # QR path working when the only thing in the image is a QR code.
+    warnings: List[str] = []
     if not extracted_text:
-        extracted_text = "sample extracted text (OCR fallback)"
-        method = "fallback"
+        if qr_payloads:
+            method = "qr_decode"
+        else:
+            method = "unavailable"
+            warnings.append(
+                "No text could be read from this image: neither the Tesseract "
+                "binary nor the local vision model is available on this "
+                "deployment. Paste the message text instead, or use the QR tab if "
+                "the image contains a code."
+            )
 
     recommendations = "Analyze the content for suspicious patterns."
 
@@ -174,4 +188,5 @@ def analyze_screenshot(
         links=extract_links(extracted_text),
         extraction_method=method,
         qr_payloads=qr_payloads,
+        warnings=warnings,
     )
