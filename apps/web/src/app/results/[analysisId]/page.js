@@ -5,6 +5,13 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import apiRequest from '../../../lib/apiClient';
 
+const MODALITY_LABELS = {
+  text: 'Text / URL',
+  screenshot: 'Screenshot',
+  email: 'Email',
+  qr: 'QR code',
+};
+
 export default function ResultPage() {
   const params = useParams();
   const router = useRouter();
@@ -143,6 +150,9 @@ export default function ResultPage() {
             <div>Method: <strong>{result.score_kind || 'heuristic_index'}</strong></div>
             <div>Engine Version: <strong>{result.scoring_version || 'local-1'}</strong></div>
             {result.llm_model ? <div>Local LLM: <strong>{result.llm_model}</strong></div> : null}
+            {result.modality && result.modality !== 'text' ? (
+              <div>Input: <strong>{MODALITY_LABELS[result.modality] || result.modality}</strong></div>
+            ) : null}
             {result.engine === 'heuristic_fallback' && result.score_kind === 'heuristic_index' ? <div>AI offline - heuristic fallback used</div> : null}
           </div>
         </div>
@@ -183,6 +193,23 @@ export default function ResultPage() {
           </ul>
         </div>
       )}
+
+      {/* QR payload and phone numbers decoded from the submitted input */}
+      {(Array.isArray(result.qr_payloads) && result.qr_payloads.length > 0) || (Array.isArray(result.extracted_phones) && result.extracted_phones.length > 0) ? (
+        <div className="card">
+          <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '1rem' }}>
+            🔳 Decoded QR Payload / 📞 Contact Numbers
+          </h3>
+          <ul style={{ paddingLeft: '1.25rem', color: '#cbd5e1', fontSize: '0.9rem' }}>
+            {Array.isArray(result.qr_payloads) && result.qr_payloads.map((payload, idx) => (
+              <li key={`qr-${idx}`} style={{ marginBottom: '0.35rem', wordBreak: 'break-all' }}>{payload}</li>
+            ))}
+            {Array.isArray(result.extracted_phones) && result.extracted_phones.map((phone, idx) => (
+              <li key={`phone-${idx}`} style={{ marginBottom: '0.35rem' }}>{phone}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {/* RAG: knowledge retrieved from the local scam-pattern corpus */}
       {Array.isArray(result.rag_context) && result.rag_context.length > 0 && (

@@ -19,6 +19,7 @@ from pydantic import BaseModel
 
 from . import ollama_client
 from .extraction import extract_links
+from .qr_analysis import decode_qr_payloads
 
 try:
     import pytesseract
@@ -65,6 +66,7 @@ class ScreenshotAnalysisResult(BaseModel):
     recommendations: str
     links: List[str] = []
     extraction_method: str = "fallback"
+    qr_payloads: List[str] = []
 
 
 def _detect_image_format(image_data: bytes) -> str:
@@ -148,6 +150,14 @@ def analyze_screenshot(file: UploadFile = File(...)):
         extracted_text = _transcribe_with_vision(image_data)
         method = "ollama_vision" if extracted_text else ""
 
+    # QR codes are decoded locally and their payloads join the extracted text,
+    # so a screenshot that is only a QR code still gets analyzed.
+    qr_payloads = decode_qr_payloads(image_data)
+    if qr_payloads:
+        qr_text = "\n".join(qr_payloads)
+        extracted_text = (extracted_text + "\n" + qr_text).strip() if extracted_text else qr_text
+        method = "{}+qr_decode".format(method) if method else "qr_decode"
+
     if not extracted_text:
         extracted_text = "sample extracted text (OCR fallback)"
         method = "fallback"
@@ -159,4 +169,5 @@ def analyze_screenshot(file: UploadFile = File(...)):
         recommendations=recommendations,
         links=extract_links(extracted_text),
         extraction_method=method,
+        qr_payloads=qr_payloads,
     )

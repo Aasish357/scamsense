@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import List, Union
+from typing import List, Optional, Union
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends
@@ -33,7 +33,7 @@ from .check import (
     assess_content_heuristically,
     build_heuristic_record,
 )
-from .extraction import extract_emails, extract_links
+from .extraction import extract_emails, extract_links, extract_phone_numbers
 from .store import create_analysis, utc_now_iso
 from .url_analysis import analyze_urls
 
@@ -42,10 +42,24 @@ router = APIRouter()
 _FENCE_PATTERN = re.compile(r"^```[a-zA-Z]*\s*|\s*```$")
 _JSON_OBJECT_PATTERN = re.compile(r"\{.*\}", re.S)
 
+VALID_MODALITIES = ("text", "screenshot", "email", "qr")
+
+MODALITY_LABELS = {
+    "text": "plain text message or URL",
+    "screenshot": "text extracted from an uploaded screenshot",
+    "email": "raw email message including its headers",
+    "qr": "payload decoded from a QR code image",
+}
+
+
+def sanitize_modality(value: str) -> str:
+    return value if value in VALID_MODALITIES else "text"
+
 
 class AnalyzeRequest(BaseModel):
     content: str
     question: str = ""
+    modality: str = "text"
 
 
 class RagMatch(BaseModel):
@@ -71,6 +85,8 @@ class AnalyzeResult(BaseModel):
     llm_model: str = ""
     extracted_links: List[str] = []
     extracted_emails: List[str] = []
+    extracted_phones: List[str] = []
+    modality: str = "text"
     rag_context: List[RagMatch] = []
 
 
@@ -156,6 +172,9 @@ def _build_prompt(
     emails: List[str],
     matches: List[dict],
     url_findings: List[dict] = None,
+    phones: List[str] = None,
+    extra_findings: List[str] = None,
+    modality: str = "text",
 ) -> str:
     lines = [
         "You are ScamSense, an assistant that decides whether a message, email",
@@ -198,22 +217,57 @@ def _build_prompt(
             lines.append("Passive URL risk signals: " + "; ".join(flagged))
     if emails:
         lines.append("Email addresses detected: " + ", ".join(emails))
+    if phones:
+        lines.append("Phone numbers detected: " + ", ".join(phones))
+    if extra_findings:
+        lines.append("")
+        lines.append(
+            "Deterministic findings from the modality analyzer (treat as established facts):"
+        )
+        for finding in extra_findings:
+            lines.append("- " + finding)
     if question:
         lines.append("")
         lines.append("Extra question from the user: " + question.strip())
     lines.append("")
+    lines.append("Input type: " + MODALITY_LABELS.get(modality, "plain text message or URL"))
     lines.append('Message to analyze:"""')
     lines.append(content)
     lines.append('"""')
     return "\n".join(lines)
 
 
-def run_llm_analysis(content: str, question: str = "") -> dict:
-    """Execute the extract -> RAG -> LLM pipeline and return a record."""
+def run_llm_analysis(
+    content: str,
+    question: str = "",
+    modality: str = "text",
+    extra_evidence: Optional[List[str]] = None,
+    suggested_score: Optional[int] = None,
+) -> dict:
+    """Execute the extract -> RAG -> LLM pipeline and return a record.
+
+    ``extra_evidence`` and ``suggested_score`` carry modality-specific findings
+    (email header authentication results, decoded QR payloads, ...) into both
+    the LLM prompt and the deterministic fallback path.
+    """
+    modality = sanitize_modality(modality)
     links = extract_links(content)
     emails = extract_emails(content)
+    phones = extract_phone_numbers(content)
     url_scan = analyze_urls(links)
     heuristic = assess_content_heuristically(content)
+
+    extra_findings = [item for item in (extra_evidence or []) if item]
+    if extra_findings:
+        heuristic = dict(
+            heuristic,
+            evidence_parts=list(heuristic["evidence_parts"]) + extra_findings,
+        )
+    if suggested_score:
+        heuristic = dict(
+            heuristic,
+            risk_score=min(95, max(heuristic["risk_score"], int(suggested_score))),
+        )
 
     query = content.strip()
     if question and question.strip():
@@ -228,6 +282,8 @@ def run_llm_analysis(content: str, question: str = "") -> dict:
         "created_at": utc_now_iso(),
         "extracted_links": links,
         "extracted_emails": emails,
+        "extracted_phones": phones,
+        "modality": modality,
         "owner": None,
         "rag_context": matches,
         "engine": "heuristic_fallback",
@@ -237,7 +293,17 @@ def run_llm_analysis(content: str, question: str = "") -> dict:
     used_llm = False
     if ollama_client.is_available():
         try:
-            prompt = _build_prompt(content, question, links, emails, matches, url_scan["results"])
+            prompt = _build_prompt(
+                content,
+                question,
+                links,
+                emails,
+                matches,
+                url_scan["results"],
+                phones,
+                extra_findings,
+                modality,
+            )
             raw = ollama_client.generate(
                 prompt,
                 model=ollama_client.chat_model(),
@@ -248,6 +314,17 @@ def run_llm_analysis(content: str, question: str = "") -> dict:
             if parsed:
                 normalized = _normalize_llm_payload(parsed, heuristic, content)
                 record.update(normalized)
+                if extra_findings:
+                    # Deterministic modality findings (header authentication,
+                    # QR payload analysis) are always shown, even when the model
+                    # produced its own evidence list.
+                    existing = record.get("evidence")
+                    items = list(existing) if isinstance(existing, list) else (
+                        [existing] if existing else []
+                    )
+                    record["evidence"] = extra_findings + [
+                        item for item in items if item not in extra_findings
+                    ]
                 record["score_kind"] = "llm_rag_index"
                 record["scoring_version"] = "ollama-{}+rag-1".format(ollama_client.chat_model())
                 record["engine"] = "ollama_rag"
@@ -257,7 +334,7 @@ def run_llm_analysis(content: str, question: str = "") -> dict:
             used_llm = False
 
     if not used_llm:
-        fallback = build_heuristic_record(content)
+        fallback = build_heuristic_record(content, extra_findings, suggested_score, modality)
         for key in (
             "risk_score",
             "risk_level",
@@ -277,7 +354,11 @@ def run_llm_analysis(content: str, question: str = "") -> dict:
 @router.post("/analyze", response_model=AnalyzeResult)
 def analyze_with_llm(request: AnalyzeRequest, user: str = Depends(get_optional_user)):
     """Extract signals, retrieve RAG context and ask the local LLM."""
-    record = run_llm_analysis(request.content or "", request.question or "")
+    record = run_llm_analysis(
+        request.content or "",
+        request.question or "",
+        sanitize_modality(request.modality),
+    )
     if user:
         record["owner"] = user
     create_analysis(record)

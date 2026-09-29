@@ -10,6 +10,7 @@ from .api.brand import router as brand_router
 from .api.check import router as check_router
 from .api.feedback import router as feedback_router
 from .api.llm_analyze import router as llm_analyze_router
+from .api.modalities import router as modalities_router
 from .api.reports import router as reports_router
 from .api.screenshot import router as screenshot_router
 
@@ -34,6 +35,7 @@ app.include_router(analysis_router)
 app.include_router(check_router)
 app.include_router(screenshot_router)
 app.include_router(llm_analyze_router)
+app.include_router(modalities_router)
 app.include_router(reports_router)
 app.include_router(admin_router)
 app.include_router(brand_router)

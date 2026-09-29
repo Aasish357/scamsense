@@ -6,7 +6,7 @@ ScamSense is a web application that helps ordinary people evaluate suspicious te
 
 > ScamSense is a decision-support tool. It does not guarantee safety or fraud, and it is not a substitute for verifying with the organization a message claims to be from.
 
-**Status:** The MVP is implemented for text/message analysis, passive URL analysis, screenshot extraction, local-AI explanations, auth with saved history, feedback/reports and a minimal admin console. Email, phone, QR, voice and billing are not implemented. The table below reflects the code, not a roadmap.
+**Status:** The MVP is implemented for text/message analysis, passive URL analysis, screenshot extraction, local-AI explanations, auth with saved history, feedback/reports and a minimal admin console. Phase 2 adds dedicated email/header analysis, phone-number risk signals and local QR decoding. Voice/deepfake analysis and billing are not implemented. The table below reflects the code, not a roadmap.
 
 ---
 
@@ -48,7 +48,7 @@ ScamSense never presents an AI assessment as proof of safety or fraud. When evid
 
 ```
 Open ScamSense
-  → Choose text, URL, or screenshot
+  → Choose text/URL, screenshot, email headers, or QR code
   → Submit content
   → See meaningful progress
   → Receive a supported assessment
@@ -65,15 +65,18 @@ No account is required to run a check. Accounts are only needed to save history.
 |---|---|
 | Guest text/message analysis | ✅ Implemented |
 | Passive URL analysis (lexical, no active fetch) | ✅ Implemented — structure, homoglyph/punycode, suspicious TLD, shortener, brand-lookalike checks |
-| Deterministic, versioned risk scoring | ✅ Implemented (`heuristic_index` / `local-1`; also the offline fallback for the AI path) |
+| Deterministic, versioned risk scoring | ✅ Implemented (`heuristic_index` / `local-2`; also the offline fallback for the AI path) |
 | Screenshot upload + OCR | ✅ Implemented — Tesseract when installed, local vision-model fallback |
+| QR code decoding | ✅ Implemented — decoded locally with OpenCV, payload scored for lookalike domains and "scan to pay" (upi://) codes |
+| Email / header analysis | ✅ Implemented — SPF/DKIM/DMARC verdicts, Reply-To / Return-Path mismatch, display-name spoofing, risky attachments |
+| Phone-number risk signals | ✅ Implemented — premium-rate lines, brand/country mismatch, messaging-app routing, pressure to call back |
 | AI-assisted, evidence-grounded explanations | ✅ Implemented — local Ollama + RAG over a scam-pattern corpus |
 | Brand verification registry | 🟡 Starter registry only (3 brands, backend route, no UI surface) |
 | Isolated active URL fetching | ⚠️ Not implemented — all URL analysis is passive/local |
 | Auth & saved history | ✅ Implemented — password auth, signed bearer tokens, per-user history |
 | Reports, feedback, admin console | ✅ Implemented — `POST /reports`, feedback, `/admin` behind `ADMIN_API_KEY` |
 | Billing | ❌ Not in MVP scope |
-| Email / phone / QR / voice analysis | ⚠️ Not implemented (Phase 2+; not shown in UI) |
+| Voice / deepfake call analysis | ⚠️ Not implemented (Phase 4; not shown in UI) |
 
 The home screen only ever exposes analysis modes that are actually implemented. A missing capability is disabled and disclosed — never simulated.
 
@@ -185,7 +188,11 @@ All endpoints are versioned under `/api/v1`.
 ```
 POST   /analyze                 # extract signals + links -> RAG retrieval -> local Ollama LLM
 POST   /check                   # deterministic heuristic analysis (used as offline fallback)
-POST   /screenshot              # image -> text/links via OCR or local vision model
+POST   /screenshot              # image -> text/links via OCR or local vision model (+ local QR decode)
+POST   /analyze/email           # raw email (headers + body) -> authentication + spoofing signals -> LLM
+POST   /analyze/email/upload    # same, from an uploaded .eml / .txt file
+GET    /analyze/email/findings  # header-level findings only, no LLM call
+POST   /analyze/qr              # image -> locally decoded QR payload -> LLM
 GET    /llm/health              # local Ollama availability and configured models
 
 GET    /api/v1/analyses/{analysis_id}
@@ -223,6 +230,12 @@ interface AnalysisResult {
   limitations: string[];
   locale: string;
   created_at: string;
+  // Which input path produced this result. The /check, /screenshot, /analyze,
+  // /analyze/email and /analyze/qr routes all return this same shape.
+  modality: "text" | "screenshot" | "email" | "qr";
+  extracted_links: string[];
+  extracted_emails: string[];
+  extracted_phones: string[];
 }
 ```
 
@@ -293,6 +306,8 @@ Detection quality (precision/recall/F1, false-positive/negative rate, latency, c
 
 - URL analysis is passive and local: URLs are parsed and scored lexically (never fetched, no DNS lookups, no JavaScript execution, no page content retrieval).
 - Screenshot uploads are validated by file signature (not extension), size- and dimension-bounded, processed in memory, and never written to disk or object storage.
+- QR codes are decoded in-process with OpenCV: the image is never sent to a third-party scanner, and only the decoded text payload enters the analysis pipeline.
+- Email analysis is offline too — SPF/DKIM/DMARC verdicts are read from the `Authentication-Results` / `Received-SPF` headers already present in the submitted message; no DNS lookups are performed. `.eml` uploads are capped at 2 MB.
 - Ownership is enforced server-side: history lists only the signed-in user's analyses, and reads/deletes of owned records require the owner's bearer token. Guest analyses are readable by anyone holding the analysis id — a deliberate MVP limitation.
 - Auth tokens are HMAC-SHA256 signed with `AUTH_SECRET`, carry a 7-day expiry, and are rejected when tampered with or expired.
 - The admin console requires `ADMIN_API_KEY`; when unset the admin API responds 503 rather than being silently open.
@@ -302,7 +317,9 @@ Full threat model: `docs/security-privacy.md`.
 
 ## Roadmap
 
-**Phase 2** — QR analysis, dedicated email analysis, phone-number risk signals, Hindi/Telugu support, expanded threat intel, "Ask ScamSense" assistant, consent-based family accounts.
+**Phase 2 (shipped)** — QR analysis, dedicated email/header analysis, phone-number risk signals.
+
+**Phase 2 (remaining)** — Hindi/Telugu support, expanded threat intel, "Ask ScamSense" assistant, consent-based family accounts.
 
 **Phase 3** — Native mobile apps, share-to-ScamSense, browser extension, email integrations, opt-in alerts, privacy-preserving aggregate intelligence (ScamSense Radar).
 

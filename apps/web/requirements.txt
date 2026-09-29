@@ -6,3 +6,4 @@ supabase
 pillow
 pytesseract
 python-multipart
+opencv-python-headless
