@@ -1,0 +1,6 @@
+# Test-only dependencies (installed on top of requirements.txt).
+# Free and local: no external services, no API keys.
+-r requirements.txt
+
+pytest
+httpx            # required by fastapi.testclient.TestClient

@@ -20,7 +20,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install -r apps/web/requirements.txt
+        run: pip install -r apps/web/requirements-dev.txt
 
       - name: Run the unit suite
         run: python -m pytest tests -q
