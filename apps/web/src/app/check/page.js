@@ -33,12 +33,26 @@ export default function CheckPage() {
     const params = new URLSearchParams(window.location.search);
     const shared = params.get('shared');
     const tab = params.get('tab');
-    if (!shared && !tab) return undefined;
+    const prefill = params.get('prefill');
+    if (!shared && !tab && !prefill) return undefined;
 
     const clean = () => window.history.replaceState({}, '', '/check');
 
     if (tab === 'qr' || tab === 'image' || tab === 'email') {
       setActiveTab(tab);
+      clean();
+      return undefined;
+    }
+    if (prefill === '1') {
+      // Deep link used by the browser extension's "Open in ScamSense" button.
+      const value = (params.get('text') || '').slice(0, 1500);
+      if (value) {
+        setInputText(value);
+        setActiveTab('text');
+        setNotice('Loaded from the browser extension. Review it, then send.');
+      } else {
+        setError('The extension did not pass any content.');
+      }
       clean();
       return undefined;
     }

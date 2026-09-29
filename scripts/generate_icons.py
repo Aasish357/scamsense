@@ -86,6 +86,14 @@ def main():
         _draw_icon(size, padding).save(path, "PNG", optimize=True)
         print("wrote", path)
 
+    # The browser extension needs its own small sizes for the toolbar.
+    extension_dir = os.path.join("apps", "extension", "icons")
+    os.makedirs(extension_dir, exist_ok=True)
+    for size in (16, 32, 48, 128):
+        path = os.path.join(extension_dir, "icon-{}.png".format(size))
+        _draw_icon(size, 0.0).save(path, "PNG", optimize=True)
+        print("wrote", path)
+
 
 if __name__ == "__main__":
     main()

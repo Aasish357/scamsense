@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ScamSense</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="header">
+      <img src="icons/icon-48.png" alt="" width="24" height="24" />
+      <h1>ScamSense</h1>
+      <button id="settings-toggle" class="ghost" type="button" title="Settings">⚙</button>
+    </header>
+
+    <main>
+      <section id="empty-state" class="empty">
+        <p>Select text, right-click a link, or check the page you are on.</p>
+        <button id="check-page" class="primary" type="button">Check this page</button>
+      </section>
+
+      <section id="result" class="hidden">
+        <div class="score-row">
+          <div id="score" class="score">--</div>
+          <div>
+            <div id="level" class="level">-</div>
+            <div id="engine" class="meta">-</div>
+          </div>
+        </div>
+        <p id="summary" class="summary"></p>
+        <h2>Evidence</h2>
+        <ul id="evidence" class="evidence"></ul>
+        <p id="recommendation" class="recommendation"></p>
+        <div class="actions">
+          <button id="open-full" class="primary" type="button">Open in ScamSense</button>
+          <button id="recheck" class="ghost" type="button">Re-check</button>
+        </div>
+      </section>
+
+      <p id="error" class="error hidden"></p>
+
+      <section id="settings" class="settings hidden">
+        <label>
+          ScamSense API
+          <input id="api-base" type="url" placeholder="http://127.0.0.1:8000" />
+        </label>
+        <label>
+          ScamSense web app
+          <input id="frontend-base" type="url" placeholder="http://localhost:3000" />
+        </label>
+        <button id="save-settings" class="primary" type="button">Save</button>
+        <p class="hint">
+          For a hosted API, grant access to the host once after saving - the extension only
+          ships permission for a local backend.
+        </p>
+      </section>
+    </main>
+
+    <footer class="footer">
+      Local-first decision support. Not proof of fraud or safety.
+    </footer>
+
+    <script src="popup.js" type="module"></script>
+  </body>
+</html>

@@ -20,5 +20,5 @@
 ## Scope status
 - **Shipped (MVP)**: guest checks, URL analysis, screenshots, local-AI explanations, auth with saved history, feedback/reports, minimal admin console.
 - **Shipped (Phase 2)**: email-header analysis, phone-number risk signals, local QR decoding, Ask ScamSense follow-up assistant.
-- **Shipped (Phase 3 so far)**: installable PWA (manifest, icons, offline page) and share-to-ScamSense for text, links and images.
+- **Shipped (Phase 3 so far)**: installable PWA (manifest, icons, offline page), share-to-ScamSense for text, links and images, and a browser extension that checks a selection, link or page in place.
 - **Not shipped**: voice/deepfake call analysis, regional-language support, hosted threat-intel feeds, billing. Unimplemented modes are not shown in the UI — never simulated.

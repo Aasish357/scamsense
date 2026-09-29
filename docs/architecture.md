@@ -57,6 +57,17 @@ input (text/URL | screenshot | raw email | QR image)
 The share action itself sends nothing anywhere: the user reviews the content in the
 form before it reaches the analysis endpoints.
 
+## Browser extension (`apps/extension`)
+
+A Manifest V3 extension with no build step: `background.js` is the service
+worker, `popup.*` is the verdict panel. Right-click (or the popup) sends the
+selection, link or page URL to `POST /analyze` on the configured API, badges the
+toolbar icon with the score, and keeps the last verdict in `chrome.storage`.
+"Open in ScamSense" deep-links to `/check?prefill=1&text=...`, where the user
+reviews the content before it is analysed. Permissions are deliberately narrow:
+`activeTab`, `scripting`, `storage`, `contextMenus`, and host access to a local
+backend only - a remote API must be granted by the user.
+
 ## Data Flow
 
 1. User picks a modality and submits content, a raw email or an image.

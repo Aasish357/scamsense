@@ -73,6 +73,7 @@ No account is required to run a check. Accounts are only needed to save history.
 | AI-assisted, evidence-grounded explanations | ✅ Implemented — local Ollama + RAG over a scam-pattern corpus |
 | Ask ScamSense assistant | ✅ Implemented — follow-up questions answered from the stored analysis + retrieved patterns; never sees the original message |
 | Installable PWA + share-to-ScamSense | ✅ Implemented — web app manifest, icons, offline page, and a share target that accepts text, links and images |
+| Browser extension (MV3) | ✅ Implemented — check a selection, link or page from the context menu; toolbar badge shows the risk score |
 | Brand verification registry | 🟡 Starter registry only (3 brands, backend route, no UI surface) |
 | Isolated active URL fetching | ⚠️ Not implemented — all URL analysis is passive/local |
 | Auth & saved history | ✅ Implemented — password auth, signed bearer tokens, per-user history |
@@ -311,6 +312,7 @@ Detection quality (precision/recall/F1, false-positive/negative rate, latency, c
 - Screenshot uploads are validated by file signature (not extension), size- and dimension-bounded, processed in memory, and never written to disk or object storage.
 - QR codes are decoded in-process with OpenCV: the image is never sent to a third-party scanner, and only the decoded text payload enters the analysis pipeline.
 - Email analysis is offline too — SPF/DKIM/DMARC verdicts are read from the `Authentication-Results` / `Received-SPF` headers already present in the submitted message; no DNS lookups are performed. `.eml` uploads are capped at 2 MB.
+- The browser extension requests no host beyond the configured ScamSense API: it ships with permission for a local backend only, asks for a remote host only when you point it at one, and has no analytics, no remote code and no update server. It sends nothing about the page you are on.
 - Share-to-ScamSense runs entirely on-device: the service worker parks a shared message, link or image in IndexedDB, and the user reviews it in the form before anything is sent. Nothing is uploaded by the share action itself, and the worker never caches analysis traffic or cross-origin requests.
 - The assistant answers from stored signals only: raw message text and images are never persisted, so a follow-up question cannot quote content the user has already deleted. Answers carry a fixed "second opinion, not proof" disclaimer, and access follows the same ownership rule as reading the analysis.
 - Ownership is enforced server-side: history lists only the signed-in user's analyses, and reads/deletes of owned records require the owner's bearer token. Guest analyses are readable by anyone holding the analysis id — a deliberate MVP limitation.
@@ -328,7 +330,9 @@ Full threat model: `docs/security-privacy.md`.
 
 **Phase 3 (shipped)** — PWA foundation (manifest, icons, offline fallback) and share-to-ScamSense for text, links and images.
 
-**Phase 3 (remaining)** — native mobile apps, browser extension, email integrations, opt-in alerts, privacy-preserving aggregate intelligence (ScamSense Radar).
+**Phase 3 (shipped, cont.)** — browser extension (Manifest V3) for checking a selection, link or page in place.
+
+**Phase 3 (remaining)** — native mobile apps, email integrations, opt-in alerts, privacy-preserving aggregate intelligence (ScamSense Radar).
 
 **Phase 4** — Evaluated call-related and voice/deepfake signals (with explicit limitations, never claimed as proof), business API, bank/telecom integrations.
 
