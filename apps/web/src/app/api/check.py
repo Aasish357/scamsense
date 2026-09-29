@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from .auth import get_optional_user
+from .rate_limit import enforce_rate_limit
 from .brand import BRAND_REGISTRY
 from .extraction import extract_links
 from .phone_analysis import PHONE_BASE_SCORE, analyze_phones
@@ -168,7 +169,11 @@ def build_heuristic_record(
 
 
 @router.post("/check", response_model=AnalysisResult)
-async def analyze_content(request: CheckRequest, user: Optional[str] = Depends(get_optional_user)):
+async def analyze_content(
+    request: CheckRequest,
+    user: Optional[str] = Depends(get_optional_user),
+    _rate_limit: None = Depends(enforce_rate_limit),
+):
     content = request.content or ""
     analysis = build_heuristic_record(content)
     if user:

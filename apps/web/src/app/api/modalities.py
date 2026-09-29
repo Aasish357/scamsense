@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from .auth import get_optional_user
 from .email_analysis import analyze_email
 from .llm_analyze import AnalyzeResult, run_llm_analysis
+from .rate_limit import enforce_rate_limit
 from .qr_analysis import analyze_qr
 from .screenshot import _validate_upload
 from .store import create_analysis
@@ -91,6 +92,7 @@ def _analyze_raw_email(raw_email: str, question: str, user) -> AnalyzeResult:
 def analyze_email_message(
     request: EmailAnalyzeRequest,
     user: str = Depends(get_optional_user),
+    _rate_limit: None = Depends(enforce_rate_limit),
 ):
     """Analyze a pasted raw email (headers + body) through the LLM pipeline."""
     return _analyze_raw_email(request.raw_email, request.question, user)
@@ -101,6 +103,7 @@ def analyze_email_upload(
     file: UploadFile = File(...),
     question: str = "",
     user: str = Depends(get_optional_user),
+    _rate_limit: None = Depends(enforce_rate_limit),
 ):
     """Analyze an uploaded .eml / .txt message file."""
     payload = file.file.read() if file.file else b""
@@ -130,6 +133,7 @@ def analyze_qr_code(
     file: UploadFile = File(...),
     question: str = "",
     user: str = Depends(get_optional_user),
+    _rate_limit: None = Depends(enforce_rate_limit),
 ):
     """Decode a QR code image locally and analyze the payload."""
     if not file.content_type or not file.content_type.startswith("image/"):

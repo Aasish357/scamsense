@@ -27,6 +27,7 @@ from pydantic import BaseModel
 
 from . import ollama_client, rag
 from .auth import get_optional_user
+from .rate_limit import enforce_rate_limit
 from .check import (
     _build_summary,
     _risk_level_for_score,
@@ -361,7 +362,11 @@ def run_llm_analysis(
 
 
 @router.post("/analyze", response_model=AnalyzeResult)
-def analyze_with_llm(request: AnalyzeRequest, user: str = Depends(get_optional_user)):
+def analyze_with_llm(
+    request: AnalyzeRequest,
+    user: str = Depends(get_optional_user),
+    _rate_limit: None = Depends(enforce_rate_limit),
+):
     """Extract signals, retrieve RAG context and ask the local LLM."""
     record = run_llm_analysis(
         request.content or "",

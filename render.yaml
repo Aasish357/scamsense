@@ -1,4 +1,4 @@
-﻿services:
+services:
   - type: web
     name: scamsense-api
     runtime: docker
@@ -10,8 +10,20 @@
       - key: PORT
         value: 8000
       - key: CORS_ORIGINS
-        sync: false
+        sync: false        # e.g. https://your-app.vercel.app
+      - key: AUTH_SECRET
+        generateValue: true # signs auth tokens; without it every restart
+                             # invalidates all sessions (random per-process fallback)
+      - key: ADMIN_API_KEY
+        sync: false        # leave unset to keep /admin disabled (returns 503)
       - key: SUPABASE_URL
-        sync: false
+        sync: false        # unset = in-memory storage (history is lost on restart)
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
+      - key: RATE_LIMIT_MAX_REQUESTS
+        value: "120"
+      - key: RATE_LIMIT_WINDOW_SECONDS
+        value: "60"
+      - key: OLLAMA_HOST
+        value: "http://127.0.0.1:11434"   # unreachable in the cloud: /analyze
+                                             # then uses the deterministic engine

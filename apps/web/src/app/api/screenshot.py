@@ -14,11 +14,12 @@ import io
 import re
 from typing import List
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from . import ollama_client
 from .extraction import extract_links
+from .rate_limit import enforce_rate_limit
 from .qr_analysis import decode_qr_payloads
 
 try:
@@ -136,7 +137,10 @@ def _transcribe_with_vision(image_data: bytes) -> str:
 
 
 @router.post("/screenshot", response_model=ScreenshotAnalysisResult)
-def analyze_screenshot(file: UploadFile = File(...)):
+def analyze_screenshot(
+    file: UploadFile = File(...),
+    _rate_limit: None = Depends(enforce_rate_limit),
+):
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File must be an image.")
 

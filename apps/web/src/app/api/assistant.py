@@ -26,6 +26,7 @@ from pydantic import BaseModel
 from . import ollama_client, rag
 from .auth import get_optional_user
 from .llm_analyze import _parse_llm_json
+from .rate_limit import enforce_rate_limit
 from .store import get_analysis
 
 router = APIRouter()
@@ -249,6 +250,7 @@ def ask_about_analysis(record: dict, question: str) -> dict:
 def ask_assistant(
     request: AssistantRequest,
     user: Optional[str] = Depends(get_optional_user),
+    _rate_limit: None = Depends(enforce_rate_limit),
 ):
     """Answer a free-form question about one stored analysis."""
     question = (request.question or "").strip()
