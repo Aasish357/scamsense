@@ -163,7 +163,7 @@ Design principles:
 | Auth | Custom password auth (PBKDF2-SHA256) + HMAC-signed bearer tokens |
 | AI | Local Ollama (`phi3:mini` chat, `moondream` vision, `nomic-embed-text` embeddings) + RAG |
 | Frontend hosting | Vercel |
-| Backend hosting | Container (Dockerfile installs Tesseract OCR) |
+| Backend hosting | Render, native Python runtime (no container). Tesseract is not installable there, so screenshot OCR is unavailable in production and the analysis falls back to its deterministic path |
 | URL analysis | Passive/lexical only — no fetcher service exists |
 
 ## Repository Structure
@@ -274,9 +274,7 @@ cd scamsense
 cd apps/web
 python -m venv .venv && .venv/Scripts/activate        # Windows; use source .venv/bin/activate on macOS/Linux
 pip install -r requirements.txt
-python -m uvicorn apps.web.src.app.main:app --port 8000 --reload
-# ...or, with Docker (adds Tesseract OCR):
-# docker compose up --build -d
+python -m uvicorn apps.web.src.app.main:app --port 8000 --reload   # or, from apps/web: uvicorn src.app.main:app --port 8000
 
 # 3. Frontend (in a second terminal)
 cd apps/web

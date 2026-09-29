@@ -5,7 +5,13 @@ import { useRouter } from 'next/navigation';
 import apiRequest from '../../lib/apiClient';
 import { clearSharedPayload, composeSharedText, readSharedPayload } from '../../lib/shareTarget';
 
-const BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
+// NEXT_PUBLIC_API_URL is the production name (set it on Vercel to the Render backend URL).
+// NEXT_PUBLIC_API_BASE_URL is kept so existing setups keep working.
+const BASE_URL = (
+  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.NEXT_PUBLIC_API_BASE_URL ||
+  'http://localhost:8000'
+).replace(/\/$/, '');
 
 const TABS = [
   { id: 'text', label: '💬 Text / URL Check' },

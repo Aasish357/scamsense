@@ -2,7 +2,13 @@
 
 import { useEffect, useState } from 'react';
 
-const BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
+// NEXT_PUBLIC_API_URL is the production name (set it on Vercel to the Render backend URL).
+// NEXT_PUBLIC_API_BASE_URL is kept so existing setups keep working.
+const BASE_URL = (
+  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.NEXT_PUBLIC_API_BASE_URL ||
+  'http://localhost:8000'
+).replace(/\/$/, '');
 const KEY_STORAGE = 'scamsense_admin_key';
 const box = { background: '#0b0f19', border: '1px solid var(--card-border)', borderRadius: '0.5rem', padding: '0.7rem 1rem', fontSize: '0.9rem' };
 

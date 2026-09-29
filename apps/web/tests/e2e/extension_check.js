@@ -59,15 +59,19 @@ function assert(condition, message) {
     assert(badge === String(Math.round(scam.result.risk_score)), `Badge "${badge}" does not match the score`);
     console.log(`[2/5] Scam text scored ${scam.result.risk_score}/100 (${scam.result.risk_level}), badge "${badge}"`);
 
-    // 3. The popup renders that verdict on open.
-    await page.reload();
-    await page.waitForSelector('#result:not(.hidden)');
-    const popupText = await page.textContent('body');
+    // 3. A freshly opened popup renders that verdict (it reads chrome.storage).
+    // A new page is used instead of reload(): reloading the only tab of a
+    // persistent context occasionally tears the whole browser down.
+    const popupPage = await context.newPage();
+    await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
+    await popupPage.waitForSelector('#result:not(.hidden)');
+    const popupText = await popupPage.textContent('body');
     assert(popupText.includes(`${Math.round(scam.result.risk_score)}/100`), 'Popup does not show the score');
     assert(/Heuristic engine|Local AI/.test(popupText), 'Popup does not name the scoring engine');
-    const evidenceCount = await page.locator('#evidence li').count();
+    const evidenceCount = await popupPage.locator('#evidence li').count();
     assert(evidenceCount > 0, 'Popup lists no evidence');
-    console.log(`[3/5] Popup renders the verdict with ${evidenceCount} evidence item(s)`);
+    await popupPage.close();
+    console.log(`[3/5] A fresh popup renders the verdict with ${evidenceCount} evidence item(s)`);
 
     // 4. A benign message scores materially lower.
     const clean = await send({ type: 'scamsense:check', text: CLEAN_TEXT, source: 'test' });

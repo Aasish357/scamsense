@@ -1,29 +1,38 @@
+# Render Blueprint - native Python runtime (no Docker).
+#
+# Layout note: the FastAPI app lives inside the web app at apps/web/src/app/main.py,
+# so the service root is apps/web and the ASGI path is src.app.main:app.
 services:
   - type: web
     name: scamsense-api
-    runtime: docker
-    dockerfilePath: ./Dockerfile
+    runtime: python
+    rootDir: apps/web
     plan: free
     region: oregon
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: uvicorn src.app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
+    autoDeploy: true
     envVars:
-      - key: PORT
-        value: 8000
+      # Pin the interpreter: the default for runtime: python can be newer than
+      # what the test suite is verified against (CI runs 3.11).
+      - key: PYTHON_VERSION
+        value: "3.11.9"
       - key: CORS_ORIGINS
-        sync: false        # e.g. https://your-app.vercel.app
+        sync: false        # set to your Vercel origin(s), e.g. https://scamsense.vercel.app
       - key: AUTH_SECRET
-        generateValue: true # signs auth tokens; without it every restart
-                             # invalidates all sessions (random per-process fallback)
+        generateValue: true  # without it, every restart invalidates all sessions
       - key: ADMIN_API_KEY
-        sync: false        # leave unset to keep /admin disabled (returns 503)
+        sync: false          # unset keeps /admin disabled (returns 503)
       - key: SUPABASE_URL
-        sync: false        # unset = in-memory storage (history is lost on restart)
+        sync: false          # unset = in-memory storage (history lost on restart)
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
       - key: RATE_LIMIT_MAX_REQUESTS
         value: "120"
       - key: RATE_LIMIT_WINDOW_SECONDS
         value: "60"
+      # Local Ollama is not reachable from a cloud host, so /analyze uses the
+      # deterministic engine there. This value only affects the timeout path.
       - key: OLLAMA_HOST
-        value: "http://127.0.0.1:11434"   # unreachable in the cloud: /analyze
-                                             # then uses the deterministic engine
+        value: "http://127.0.0.1:11434"
