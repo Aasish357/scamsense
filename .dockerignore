@@ -1,0 +1,17 @@
+# Keep the build context small: these directories are large and are either
+# regenerated in the image or irrelevant to the backend.
+.git
+.github
+node_modules
+**/node_modules
+apps/web/.next
+apps/web/next_start.log
+**/__pycache__
+**/*.pyc
+.pytest_cache
+corpus/external
+*.log
+*.err
+.env
+.env.local
+.env.production

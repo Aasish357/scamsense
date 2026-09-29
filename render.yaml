@@ -1,25 +1,20 @@
-# Render Blueprint - native Python runtime (no Docker).
+# Render Blueprint - backend service.
 #
-# Layout note: the FastAPI app lives inside the web app at apps/web/src/app/main.py,
-# so the service root is apps/web and the ASGI path is src.app.main:app.
+# This uses a container rather than Render's native Python runtime because
+# Tesseract (screenshot OCR) is a system binary and the native runtime cannot
+# install system packages. The image installs it; everything else is unchanged.
 services:
   - type: web
     name: scamsense-api
-    runtime: python
-    rootDir: apps/web
+    runtime: docker
+    dockerfilePath: ./Dockerfile
     plan: free
     region: oregon
-    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
-    startCommand: uvicorn src.app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     autoDeploy: true
     envVars:
-      # Pin the interpreter: the default for runtime: python can be newer than
-      # what the test suite is verified against (CI runs 3.11).
-      - key: PYTHON_VERSION
-        value: "3.11.9"
       - key: CORS_ORIGINS
-        sync: false        # set to your Vercel origin(s), e.g. https://scamsense.vercel.app
+        sync: false        # set to your Vercel origin, e.g. https://your-app.vercel.app
       - key: AUTH_SECRET
         generateValue: true  # without it, every restart invalidates all sessions
       - key: ADMIN_API_KEY
@@ -33,6 +28,6 @@ services:
       - key: RATE_LIMIT_WINDOW_SECONDS
         value: "60"
       # Local Ollama is not reachable from a cloud host, so /analyze uses the
-      # deterministic engine there. This value only affects the timeout path.
+      # deterministic engine there. Only affects the narrative, not the score.
       - key: OLLAMA_HOST
         value: "http://127.0.0.1:11434"

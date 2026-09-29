@@ -40,9 +40,13 @@ This document describes how to deploy the **ScamSense** stack to production.
 
 ## 2. Backend Deployment (FastAPI on Render)
 
-The backend is deployed as a **native Python service** - no container. The
-`render.yaml` Blueprint at the repository root contains the exact settings, so
-the dashboard mostly comes down to two fields you must fill in.
+The backend runs as a **container** on Render. The `render.yaml` Blueprint at
+the repository root contains the exact settings.
+
+A container is used for one concrete reason: **Tesseract is a system binary**, and
+Render's native Python runtime cannot install system packages, so without an
+image screenshot OCR is impossible. Nothing else is containerised - the frontend
+is still a static Next.js build on Vercel.
 
 ### Option A: Render Blueprint (recommended)
 
@@ -76,13 +80,13 @@ the dashboard mostly comes down to two fields you must fill in.
 
 ### Option B: Render Web Service (manual)
 
-Same values as above, entered by hand: runtime *Python*, root directory
-`apps/web`, build `pip install -r requirements.txt`, start
-`uvicorn src.app.main:app --host 0.0.0.0 --port $PORT`, health check `/health`.
+Same, entered by hand: runtime *Docker*, Dockerfile path `./Dockerfile`, health
+check `/health`.
 
 ### Local / VPS
 
-No container needed:
+No container needed for local work (Tesseract is optional; without it, screenshot
+text extraction is unavailable locally too):
 
 ```bash
 cd apps/web
@@ -96,12 +100,11 @@ curl http://localhost:8000/health
 `requirements.txt` includes `opencv-python-headless` (QR decoding) and
 `pytesseract`. The headless OpenCV wheel needs no system libraries.
 
-**Known production limitation:** `pytesseract` is only a wrapper around the
-Tesseract binary, and Render's native Python runtime cannot install system
-packages. Screenshot uploads therefore fall back to the deterministic path
-(embedded QR codes are still decoded with OpenCV, and any text the client
-already extracted is analysed normally). Installing Tesseract would require a
-container, which this deployment deliberately does not use.
+`pytesseract` is only a wrapper around the Tesseract binary, so it needs the
+container. If the service is ever switched back to a native runtime, screenshot
+OCR stops working: the API then returns `extraction_method: unavailable` with a
+warning rather than inventing text, so an unreadable screenshot is never reported
+as "safe".
 
 ### Local AI
 
