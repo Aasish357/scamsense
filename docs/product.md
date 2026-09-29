@@ -19,5 +19,5 @@
 
 ## Scope status
 - **Shipped (MVP)**: guest checks, URL analysis, screenshots, local-AI explanations, auth with saved history, feedback/reports, minimal admin console.
-- **Shipped (Phase 2)**: email-header analysis, phone-number risk signals, local QR decoding.
+- **Shipped (Phase 2)**: email-header analysis, phone-number risk signals, local QR decoding, Ask ScamSense follow-up assistant.
 - **Not shipped**: voice/deepfake call analysis, regional-language support, hosted threat-intel feeds, billing. Unimplemented modes are not shown in the UI — never simulated.

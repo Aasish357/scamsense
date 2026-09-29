@@ -23,6 +23,10 @@ export default function ResultPage() {
   const [deleting, setDeleting] = useState(false);
   const [reporting, setReporting] = useState(false);
   const [reportDone, setReportDone] = useState(false);
+  const [question, setQuestion] = useState('');
+  const [asking, setAsking] = useState(false);
+  const [answer, setAnswer] = useState(null);
+  const [askError, setAskError] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -66,6 +70,28 @@ export default function ResultPage() {
       alert(`Failed to submit report: ${err.message}`);
     } finally {
       setReporting(false);
+    }
+  };
+
+  const handleAsk = async (e, preset) => {
+    if (e) e.preventDefault();
+    const asked = (preset || question).trim();
+    if (!asked) return;
+    setAsking(true);
+    setAskError(null);
+    try {
+      // Grounded in the stored analysis only: the local LLM never sees the
+      // original message text, because ScamSense does not keep it.
+      const data = await apiRequest('/assistant/ask', 'POST', {
+        analysis_id: analysisId,
+        question: asked,
+      });
+      setQuestion(asked);
+      setAnswer(data);
+    } catch (err) {
+      setAskError(err.message || 'Failed to get an answer');
+    } finally {
+      setAsking(false);
     }
   };
 
@@ -278,6 +304,91 @@ export default function ResultPage() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Ask ScamSense: grounded follow-up questions about this analysis */}
+      <div className="card">
+        <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+          💬 Ask ScamSense
+        </h3>
+        <p style={{ fontSize: '0.85rem', color: '#94a3b8', marginBottom: '1rem' }}>
+          Ask about the signals in <em>this</em> analysis. Answers come from the local AI,
+          grounded only in the evidence ScamSense stored for this result.
+        </p>
+
+        <form onSubmit={handleAsk} style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <input
+            type="text"
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            placeholder="Why was this flagged?"
+            maxLength={500}
+            aria-label="Ask a question about this analysis"
+            style={{
+              flex: 1,
+              minWidth: '220px',
+              background: '#0b0f19',
+              border: '1px solid var(--card-border)',
+              borderRadius: '0.5rem',
+              color: '#fff',
+              padding: '0.65rem 0.85rem',
+              fontSize: '0.9rem'
+            }}
+          />
+          <button
+            type="submit"
+            disabled={asking || !question.trim()}
+            className="cta-button"
+            style={{ padding: '0.65rem 1.25rem', opacity: asking || !question.trim() ? 0.6 : 1 }}
+          >
+            {asking ? 'Thinking...' : 'Ask →'}
+          </button>
+        </form>
+
+        {askError && (
+          <p style={{ color: '#f87171', fontSize: '0.85rem', marginTop: '0.75rem' }}>{askError}</p>
+        )}
+
+        {answer && (
+          <div style={{ marginTop: '1rem', background: '#0b0f19', border: '1px solid var(--card-border)', borderRadius: '0.5rem', padding: '1rem' }}>
+            <p style={{ color: '#e2e8f0', fontSize: '0.95rem', whiteSpace: 'pre-wrap' }}>
+              {answer.answer}
+            </p>
+
+            {Array.isArray(answer.grounding) && answer.grounding.length > 0 && (
+              <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.75rem' }}>
+                Based on: {answer.grounding.map((item) => `${item.title} (${item.category})`).join(' · ')}
+              </p>
+            )}
+            <p style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.5rem' }}>
+              {answer.disclaimer}
+            </p>
+
+            {Array.isArray(answer.follow_ups) && answer.follow_ups.length > 0 && (
+              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.9rem' }}>
+                {answer.follow_ups.map((followUp, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => handleAsk(null, followUp)}
+                    disabled={asking}
+                    style={{
+                      background: '#1e293b',
+                      border: '1px solid #334155',
+                      color: '#cbd5e1',
+                      fontSize: '0.75rem',
+                      padding: '0.3rem 0.7rem',
+                      borderRadius: '0.35rem',
+                      cursor: asking ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    {followUp}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Report this analysis for admin review */}

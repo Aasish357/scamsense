@@ -10,7 +10,7 @@
 
 ## Analysis modalities
 
-Every modality converges on the same pipeline, so results, history and reporting stay comparable:
+Every modality converges on the same pipeline, so results, history and reporting stay comparable. A finished analysis can then be interrogated through `/assistant/ask`, which reuses the same RAG corpus and local LLM but reasons only over the stored record.
 
 ```
 input (text/URL | screenshot | raw email | QR image)
@@ -37,6 +37,7 @@ input (text/URL | screenshot | raw email | QR image)
 | `api/qr_analysis.py` | local QR decode (OpenCV) and payload scoring |
 | `api/screenshot.py` | upload validation, OCR / vision transcription, QR decode |
 | `api/modalities.py` | `/analyze/email`, `/analyze/email/upload`, `/analyze/email/findings`, `/analyze/qr` |
+| `api/assistant.py` | `/assistant/ask` - grounded follow-up questions over a stored analysis |
 | `api/extraction.py` | link, email and phone extraction/normalization |
 | `api/auth.py`, `api/store.py` | HMAC-signed tokens, ownership rules, Supabase/in-memory persistence |
 | `api/rag.py`, `api/ollama_client.py` | local retrieval and model client |

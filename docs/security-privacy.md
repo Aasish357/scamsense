@@ -16,6 +16,7 @@ ScamSense ingests hostile input by design: the submitted text, email, URL or ima
 | Admin surface exposure | Admin routes require `ADMIN_API_KEY`; when unset the API returns 503 rather than silently opening. |
 | Log leakage | Raw content, credentials and images are never written to application logs. |
 | Resource exhaustion via LLM | LLM calls have explicit timeouts and degrade to the deterministic engine. |
+| Assistant leaking data it should not have | The assistant receives only the sanitized fields of one stored analysis (never raw message text or images, which are not persisted) plus public scam-pattern text. Questions are capped at 500 characters, scoped to a single analysis id, and inherit that analysis' ownership check. |
 
 ## Access controls
 - HMAC-SHA256 signed bearer tokens (`AUTH_SECRET`), 7-day expiry, rejected when tampered with or expired.

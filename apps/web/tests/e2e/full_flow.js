@@ -43,7 +43,7 @@ const SCAM_EMAIL = [
   await page.goto(FRONTEND + '/');
   await page.getByText(/FastAPI Backend: (checking|online|offline|error)/).waitFor();
   await page.getByText('Local AI (Ollama):').waitFor();
-  console.log('[1/8] Home status pills rendered');
+  console.log('[1/9] Home status pills rendered');
 
   // 2. Register + sign in through the UI (token is stored client-side).
   const username = 'e2e-' + Date.now().toString(36);
@@ -57,7 +57,7 @@ const SCAM_EMAIL = [
   await page.getByText('Signed in as').waitFor();
   const token = await page.evaluate(() => window.localStorage.getItem('scamsense_token'));
   if (!token) throw new Error('No auth token stored after sign-in');
-  console.log('[2/8] Registered + signed in as ' + username);
+  console.log('[2/9] Registered + signed in as ' + username);
 
   // 3. Text flow: Send -> /analyze -> results with RAG context.
   await page.goto(FRONTEND + '/check');
@@ -73,12 +73,12 @@ const SCAM_EMAIL = [
   if (!/llm_rag_index|Local LLM/.test(bodyText)) {
     throw new Error('Results page is missing LLM engine details');
   }
-  console.log('[3/8] Text flow: Send -> /analyze -> results with RAG context');
+  console.log('[3/9] Text flow: Send -> /analyze -> results with RAG context');
 
   // 4. Report the analysis for admin review.
   await page.getByRole('button', { name: /Report this analysis/ }).click();
   await page.getByText('Report submitted').waitFor();
-  console.log('[4/8] Report submitted from results page');
+  console.log('[4/9] Report submitted from results page');
 
   // 5. Image flow: upload screenshot, Send, backend extracts then analyzes.
   await page.goto(FRONTEND + '/check');
@@ -87,7 +87,7 @@ const SCAM_EMAIL = [
   await page.getByRole('button', { name: /Send to AI/ }).click();
   await page.waitForURL(/\/results\//, { timeout: 180000 });
   await page.getByText('Retrieved Knowledge (RAG)').waitFor({ timeout: 30000 });
-  console.log('[5/8] Image flow: upload -> /screenshot -> /analyze -> results');
+  console.log('[5/9] Image flow: upload -> /screenshot -> /analyze -> results');
 
   // 6. History shows this user\'s saved analyses; guests get a sign-in prompt.
   await page.goto(FRONTEND + '/history');
@@ -95,7 +95,7 @@ const SCAM_EMAIL = [
   await page.evaluate(() => window.localStorage.clear());
   await page.reload();
   await page.getByText('History is saved to your account').waitFor({ timeout: 30000 });
-  console.log('[6/8] History scoped to the signed-in user; guests prompted to sign in');
+  console.log('[6/9] History scoped to the signed-in user; guests prompted to sign in');
 
   // 7. Email flow: paste raw headers -> /analyze/email -> header findings in results.
   await page.goto(FRONTEND + '/check');
@@ -111,7 +111,7 @@ const SCAM_EMAIL = [
   if (!/DMARC authentication failed|SPF authentication failed/.test(emailBody)) {
     throw new Error('Email authentication findings are missing from the results page');
   }
-  console.log('[7/8] Email flow: raw headers -> /analyze/email -> results with auth findings');
+  console.log('[7/9] Email flow: raw headers -> /analyze/email -> results with auth findings');
 
   // 8. QR flow: upload image -> local OpenCV decode -> /analyze/qr -> results.
   await page.goto(FRONTEND + '/check');
@@ -127,7 +127,17 @@ const SCAM_EMAIL = [
   if (!qrBody.includes('http://free-prize-claim.top/verify')) {
     throw new Error('Decoded QR payload is missing from the results page');
   }
-  console.log('[8/8] QR flow: upload -> local decode -> /analyze/qr -> results');
+  console.log('[8/9] QR flow: upload -> local decode -> /analyze/qr -> results');
+
+  // 9. Ask ScamSense: a follow-up question answered from the stored analysis.
+  await page.locator('input[aria-label="Ask a question about this analysis"]').fill('Why was this flagged?');
+  await page.getByRole('button', { name: /^Ask/ }).click();
+  await page.getByText(/second opinion, not proof of fraud or safety/).waitFor({ timeout: 180000 });
+  const askBody = await page.textContent('body');
+  if (!/Based on:/.test(askBody)) {
+    throw new Error('Assistant answer is missing its grounding disclosure');
+  }
+  console.log('[9/9] Ask ScamSense: question -> /assistant/ask -> grounded answer with disclaimer');
 
   await browser.close();
   console.log('E2E PASSED');

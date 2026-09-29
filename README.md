@@ -71,6 +71,7 @@ No account is required to run a check. Accounts are only needed to save history.
 | Email / header analysis | ✅ Implemented — SPF/DKIM/DMARC verdicts, Reply-To / Return-Path mismatch, display-name spoofing, risky attachments |
 | Phone-number risk signals | ✅ Implemented — premium-rate lines, brand/country mismatch, messaging-app routing, pressure to call back |
 | AI-assisted, evidence-grounded explanations | ✅ Implemented — local Ollama + RAG over a scam-pattern corpus |
+| Ask ScamSense assistant | ✅ Implemented — follow-up questions answered from the stored analysis + retrieved patterns; never sees the original message |
 | Brand verification registry | 🟡 Starter registry only (3 brands, backend route, no UI surface) |
 | Isolated active URL fetching | ⚠️ Not implemented — all URL analysis is passive/local |
 | Auth & saved history | ✅ Implemented — password auth, signed bearer tokens, per-user history |
@@ -193,6 +194,7 @@ POST   /analyze/email           # raw email (headers + body) -> authentication +
 POST   /analyze/email/upload    # same, from an uploaded .eml / .txt file
 GET    /analyze/email/findings  # header-level findings only, no LLM call
 POST   /analyze/qr              # image -> locally decoded QR payload -> LLM
+POST   /assistant/ask           # follow-up question answered from the stored analysis (+ RAG)
 GET    /llm/health              # local Ollama availability and configured models
 
 GET    /api/v1/analyses/{analysis_id}
@@ -308,6 +310,7 @@ Detection quality (precision/recall/F1, false-positive/negative rate, latency, c
 - Screenshot uploads are validated by file signature (not extension), size- and dimension-bounded, processed in memory, and never written to disk or object storage.
 - QR codes are decoded in-process with OpenCV: the image is never sent to a third-party scanner, and only the decoded text payload enters the analysis pipeline.
 - Email analysis is offline too — SPF/DKIM/DMARC verdicts are read from the `Authentication-Results` / `Received-SPF` headers already present in the submitted message; no DNS lookups are performed. `.eml` uploads are capped at 2 MB.
+- The assistant answers from stored signals only: raw message text and images are never persisted, so a follow-up question cannot quote content the user has already deleted. Answers carry a fixed "second opinion, not proof" disclaimer, and access follows the same ownership rule as reading the analysis.
 - Ownership is enforced server-side: history lists only the signed-in user's analyses, and reads/deletes of owned records require the owner's bearer token. Guest analyses are readable by anyone holding the analysis id — a deliberate MVP limitation.
 - Auth tokens are HMAC-SHA256 signed with `AUTH_SECRET`, carry a 7-day expiry, and are rejected when tampered with or expired.
 - The admin console requires `ADMIN_API_KEY`; when unset the admin API responds 503 rather than being silently open.
@@ -317,9 +320,9 @@ Full threat model: `docs/security-privacy.md`.
 
 ## Roadmap
 
-**Phase 2 (shipped)** — QR analysis, dedicated email/header analysis, phone-number risk signals.
+**Phase 2 (shipped)** — QR analysis, dedicated email/header analysis, phone-number risk signals, "Ask ScamSense" assistant.
 
-**Phase 2 (remaining)** — Hindi/Telugu support, expanded threat intel, "Ask ScamSense" assistant, consent-based family accounts.
+**Phase 2 (remaining)** — Hindi/Telugu support, expanded threat intel, consent-based family accounts.
 
 **Phase 3** — Native mobile apps, share-to-ScamSense, browser extension, email integrations, opt-in alerts, privacy-preserving aggregate intelligence (ScamSense Radar).
 
