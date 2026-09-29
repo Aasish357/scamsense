@@ -1,9 +1,9 @@
-﻿# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies (including tesseract for OCR support)
+# Install system dependencies (tesseract for OCR; libgl/libglib for OpenCV QR decoding)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     tesseract-ocr-eng \

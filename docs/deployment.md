@@ -1,4 +1,4 @@
-﻿# Deployment Guide
+# Deployment Guide
 
 This document describes how to deploy the **ScamSense** stack to production.
 
@@ -14,21 +14,26 @@ This document describes how to deploy the **ScamSense** stack to production.
 
 1. Create a project at [supabase.com](https://supabase.com).
 2. Go to the **SQL Editor** in your Supabase project dashboard.
-3. Apply the initial migration:
+3. Apply all migrations in order (files in `supabase/migrations/`):
    ```bash
    # If using Supabase CLI
    supabase db push
    ```
-   Or copy the SQL statements directly from `supabase/migrations/20260928000001_init.sql` into the SQL Editor and execute.
-4. The migration will create:
+   Or paste each file into the SQL Editor and execute them in sequence:
+   - `20260928000001_init.sql` - core tables and RLS policies
+   - `20260928000002_analysis_llm_fields.sql` - LLM/RAG analysis columns
+   - `20260928000003_auth_ownership_and_reports.sql` - ownership and reports
+   - `20260928000004_analysis_modalities.sql` - `modality`, `extracted_phones`, `email_findings`, `qr_payloads`
+4. The migrations will create:
    - `users`: table for user credentials and profiles with unique constraints on `username` and `email`.
-   - `analyses`: table storing text/screenshot analysis results keyed by `analysis_id`.
+   - `analyses`: table storing text/URL, screenshot, email and QR analysis results keyed by `analysis_id` (see the `modality` column).
    - `feedback`: table recording user submissions.
+   - `reports`: table recording user-flagged analyses for admin review.
    - Row-Level Security (RLS) policies and performance indexes for each table.
 5. In your Supabase dashboard under **Project Settings > API**, locate:
-   - `Project URL` (`SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_URL`)
-   - `anon public` key (`NEXT_PUBLIC_SUPABASE_ANON_KEY`)
-   - `service_role secret` key (`SUPABASE_SERVICE_ROLE_KEY` — server only, keep private)
+   - **Project URL** (`SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_URL`)
+   - **anon public** key (`NEXT_PUBLIC_SUPABASE_ANON_KEY`)
+   - **service_role secret** key (`SUPABASE_SERVICE_ROLE_KEY` - server only, keep private)
 
 ---
 
@@ -42,12 +47,13 @@ This document describes how to deploy the **ScamSense** stack to production.
    - `CORS_ORIGINS`: Comma-separated list of allowed origins, e.g. `https://your-frontend.vercel.app,http://localhost:3000`
    - `SUPABASE_URL`: Your Supabase Project URL.
    - `SUPABASE_SERVICE_ROLE_KEY`: Your Supabase Service Role Key.
-4. Render will build using the root `Dockerfile` (which includes OCR system libraries like `tesseract-ocr`) and run healthchecks at `/health`.
+   - `AUTH_SECRET`: Secret used to sign auth tokens.
+4. Render will build using the root `Dockerfile` (which installs the OCR and OpenCV system libraries) and run healthchecks at `/health`.
 
 ### Option B: Railway
 1. In [Railway](https://railway.app), create a new project from your repo.
 2. Railway detects `Dockerfile` and `railway.json`.
-3. Add the environment variables (`CORS_ORIGINS`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `PORT`).
+3. Add the environment variables (`CORS_ORIGINS`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `AUTH_SECRET`, `PORT`).
 4. Generate a public domain (e.g. `https://scamsense-api.up.railway.app`).
 
 ### Option C: Docker / VPS
@@ -59,6 +65,15 @@ Verify the API:
 ```bash
 curl http://localhost:8000/health
 ```
+
+### Python dependencies
+`apps/web/requirements.txt` includes `opencv-python-headless` (local QR decoding) and `pytesseract` (OCR).
+The headless OpenCV wheel needs no GUI libraries; the `Dockerfile` already installs the shared
+runtime libraries (`libgl1`, `libglib2.0-0`) and `tesseract-ocr`.
+
+> If `opencv-python-headless` cannot be installed in your environment, the rest of ScamSense keeps
+> working: `/analyze/qr` returns HTTP 422 ("No QR code could be decoded") and screenshot analysis
+> simply skips QR extraction.
 
 ---
 
