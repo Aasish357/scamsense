@@ -32,7 +32,9 @@ router = APIRouter()
 
 MAX_QUESTION_LENGTH = 500
 MAX_ANSWER_CHARS = 2000
-LLM_TIMEOUT_SECONDS = 60.0
+# A follow-up question is interactive: past this budget the deterministic,
+# evidence-only answer is more useful than silence.
+LLM_TIMEOUT_SECONDS = 45.0
 
 DISCLAIMER = (
     "ScamSense gives an evidence-based second opinion, not proof of fraud or "

@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import apiRequest from '../../lib/apiClient';
+import { clearSharedPayload, composeSharedText, readSharedPayload } from '../../lib/shareTarget';
 
 const BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
 
@@ -23,6 +24,86 @@ export default function CheckPage() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
   const [error, setError] = useState(null);
+  const [notice, setNotice] = useState('');
+
+  // Share target (PWA "Share to ScamSense") and manifest shortcuts.
+  // The service worker parks shared text/links/images in IndexedDB; the
+  // server-side /share fallback passes short shares through the query string.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const shared = params.get('shared');
+    const tab = params.get('tab');
+    if (!shared && !tab) return undefined;
+
+    const clean = () => window.history.replaceState({}, '', '/check');
+
+    if (tab === 'qr' || tab === 'image' || tab === 'email') {
+      setActiveTab(tab);
+      clean();
+      return undefined;
+    }
+    if (!shared) return undefined;
+
+    const fail = (message) => {
+      setError(message);
+      clean();
+    };
+
+    if (shared === 'empty') {
+      fail('Nothing was shared. Paste the message or pick a file below.');
+      return undefined;
+    }
+    if (shared === 'toolong') {
+      fail('That shared message was too long to bring over. Paste it into the box below.');
+      return undefined;
+    }
+    if (shared === 'error') {
+      fail('ScamSense could not read what was shared. Please paste it instead.');
+      return undefined;
+    }
+
+    const inline = params.get('text');
+    if (inline) {
+      setInputText(inline);
+      setActiveTab('text');
+      setNotice('Loaded from your share. Review it, then send.');
+      clean();
+      return undefined;
+    }
+
+    let cancelled = false;
+    readSharedPayload().then(async (payload) => {
+      if (cancelled) return;
+      if (!payload) {
+        fail('The shared content expired. Please share it again.');
+        return;
+      }
+      if (payload.image) {
+        const file = new File([payload.image], payload.image.name || 'shared-image.png', {
+          type: payload.image.type || 'image/png',
+        });
+        setFile(file);
+        setActiveTab('image');
+        setNotice('Loaded the shared image. Review it, then send.');
+      } else {
+        const text = composeSharedText(payload);
+        if (text) {
+          setInputText(text);
+          setActiveTab('text');
+          setNotice('Loaded from your share. Review it, then send.');
+        } else {
+          fail('That share was empty.');
+          return;
+        }
+      }
+      await clearSharedPayload();
+      clean();
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Quick preset buttons for demo testing
   const presets = [
@@ -234,6 +315,22 @@ export default function CheckPage() {
           fontSize: '0.9rem'
         }}>
           <strong>Error:</strong> {error}
+        </div>
+      )}
+
+      {notice && (
+        <div
+          style={{
+            background: 'rgba(59, 130, 246, 0.1)',
+            border: '1px solid rgba(59, 130, 246, 0.3)',
+            borderRadius: '0.5rem',
+            padding: '0.75rem 1rem',
+            marginBottom: '1.5rem',
+            color: '#bfdbfe',
+            fontSize: '0.9rem'
+          }}
+        >
+          {notice}
         </div>
       )}
 

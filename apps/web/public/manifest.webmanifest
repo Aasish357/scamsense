@@ -1,0 +1,63 @@
+{
+  "name": "ScamSense - Know Before You Trust",
+  "short_name": "ScamSense",
+  "description": "Check suspicious messages, links, screenshots, emails and QR codes before you act.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0b1220",
+  "theme_color": "#0b1220",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["security", "utilities", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "share_target": {
+    "action": "/share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        {
+          "name": "image",
+          "accept": ["image/*"]
+        }
+      ]
+    }
+  },
+  "shortcuts": [
+    {
+      "name": "Check a message",
+      "short_name": "Text check",
+      "url": "/check"
+    },
+    {
+      "name": "Scan a QR code",
+      "short_name": "QR scan",
+      "url": "/check?tab=qr"
+    }
+  ]
+}

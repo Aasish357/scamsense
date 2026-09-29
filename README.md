@@ -72,6 +72,7 @@ No account is required to run a check. Accounts are only needed to save history.
 | Phone-number risk signals | ✅ Implemented — premium-rate lines, brand/country mismatch, messaging-app routing, pressure to call back |
 | AI-assisted, evidence-grounded explanations | ✅ Implemented — local Ollama + RAG over a scam-pattern corpus |
 | Ask ScamSense assistant | ✅ Implemented — follow-up questions answered from the stored analysis + retrieved patterns; never sees the original message |
+| Installable PWA + share-to-ScamSense | ✅ Implemented — web app manifest, icons, offline page, and a share target that accepts text, links and images |
 | Brand verification registry | 🟡 Starter registry only (3 brands, backend route, no UI surface) |
 | Isolated active URL fetching | ⚠️ Not implemented — all URL analysis is passive/local |
 | Auth & saved history | ✅ Implemented — password auth, signed bearer tokens, per-user history |
@@ -310,6 +311,7 @@ Detection quality (precision/recall/F1, false-positive/negative rate, latency, c
 - Screenshot uploads are validated by file signature (not extension), size- and dimension-bounded, processed in memory, and never written to disk or object storage.
 - QR codes are decoded in-process with OpenCV: the image is never sent to a third-party scanner, and only the decoded text payload enters the analysis pipeline.
 - Email analysis is offline too — SPF/DKIM/DMARC verdicts are read from the `Authentication-Results` / `Received-SPF` headers already present in the submitted message; no DNS lookups are performed. `.eml` uploads are capped at 2 MB.
+- Share-to-ScamSense runs entirely on-device: the service worker parks a shared message, link or image in IndexedDB, and the user reviews it in the form before anything is sent. Nothing is uploaded by the share action itself, and the worker never caches analysis traffic or cross-origin requests.
 - The assistant answers from stored signals only: raw message text and images are never persisted, so a follow-up question cannot quote content the user has already deleted. Answers carry a fixed "second opinion, not proof" disclaimer, and access follows the same ownership rule as reading the analysis.
 - Ownership is enforced server-side: history lists only the signed-in user's analyses, and reads/deletes of owned records require the owner's bearer token. Guest analyses are readable by anyone holding the analysis id — a deliberate MVP limitation.
 - Auth tokens are HMAC-SHA256 signed with `AUTH_SECRET`, carry a 7-day expiry, and are rejected when tampered with or expired.
@@ -324,7 +326,9 @@ Full threat model: `docs/security-privacy.md`.
 
 **Phase 2 (remaining)** — Hindi/Telugu support, expanded threat intel, consent-based family accounts.
 
-**Phase 3** — Native mobile apps, share-to-ScamSense, browser extension, email integrations, opt-in alerts, privacy-preserving aggregate intelligence (ScamSense Radar).
+**Phase 3 (shipped)** — PWA foundation (manifest, icons, offline fallback) and share-to-ScamSense for text, links and images.
+
+**Phase 3 (remaining)** — native mobile apps, browser extension, email integrations, opt-in alerts, privacy-preserving aggregate intelligence (ScamSense Radar).
 
 **Phase 4** — Evaluated call-related and voice/deepfake signals (with explicit limitations, never claimed as proof), business API, bank/telecom integrations.
 

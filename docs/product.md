@@ -2,7 +2,7 @@
 
 ## User Journey
 1. User opens ScamSense.
-2. Chooses one of four analysis modes: **text/URL**, **screenshot**, **email headers**, or **QR code**.
+2. Either shares content into ScamSense from the phone/app share sheet, or chooses one of four analysis modes: **text/URL**, **screenshot**, **email headers**, or **QR code**.
 3. Submits the content (typed, pasted, or uploaded).
 4. Receives a risk assessment with a score, evidence and a recommended action.
 5. Understands the evidence and what it does — and does not — prove.
@@ -20,4 +20,5 @@
 ## Scope status
 - **Shipped (MVP)**: guest checks, URL analysis, screenshots, local-AI explanations, auth with saved history, feedback/reports, minimal admin console.
 - **Shipped (Phase 2)**: email-header analysis, phone-number risk signals, local QR decoding, Ask ScamSense follow-up assistant.
+- **Shipped (Phase 3 so far)**: installable PWA (manifest, icons, offline page) and share-to-ScamSense for text, links and images.
 - **Not shipped**: voice/deepfake call analysis, regional-language support, hosted threat-intel feeds, billing. Unimplemented modes are not shown in the UI — never simulated.

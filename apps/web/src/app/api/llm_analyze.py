@@ -44,6 +44,11 @@ _JSON_OBJECT_PATTERN = re.compile(r"\{.*\}", re.S)
 
 VALID_MODALITIES = ("text", "screenshot", "email", "qr")
 
+# The deterministic engine already produces the score, so a slow local model is
+# not worth making the user wait on: past this budget the endpoint degrades to
+# the heuristic answer instead of stalling the request.
+LLM_TIMEOUT_SECONDS = 60.0
+
 MODALITY_LABELS = {
     "text": "plain text message or URL",
     "screenshot": "text extracted from an uploaded screenshot",
@@ -312,7 +317,7 @@ def run_llm_analysis(
                 prompt,
                 model=ollama_client.chat_model(),
                 json_format=True,
-                timeout=120.0,
+                timeout=LLM_TIMEOUT_SECONDS,
             )
             parsed = _parse_llm_json(raw)
             if parsed:

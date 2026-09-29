@@ -43,7 +43,7 @@ const SCAM_EMAIL = [
   await page.goto(FRONTEND + '/');
   await page.getByText(/FastAPI Backend: (checking|online|offline|error)/).waitFor();
   await page.getByText('Local AI (Ollama):').waitFor();
-  console.log('[1/9] Home status pills rendered');
+  console.log('[1/10] Home status pills rendered');
 
   // 2. Register + sign in through the UI (token is stored client-side).
   const username = 'e2e-' + Date.now().toString(36);
@@ -57,7 +57,7 @@ const SCAM_EMAIL = [
   await page.getByText('Signed in as').waitFor();
   const token = await page.evaluate(() => window.localStorage.getItem('scamsense_token'));
   if (!token) throw new Error('No auth token stored after sign-in');
-  console.log('[2/9] Registered + signed in as ' + username);
+  console.log('[2/10] Registered + signed in as ' + username);
 
   // 3. Text flow: Send -> /analyze -> results with RAG context.
   await page.goto(FRONTEND + '/check');
@@ -73,12 +73,12 @@ const SCAM_EMAIL = [
   if (!/llm_rag_index|Local LLM/.test(bodyText)) {
     throw new Error('Results page is missing LLM engine details');
   }
-  console.log('[3/9] Text flow: Send -> /analyze -> results with RAG context');
+  console.log('[3/10] Text flow: Send -> /analyze -> results with RAG context');
 
   // 4. Report the analysis for admin review.
   await page.getByRole('button', { name: /Report this analysis/ }).click();
   await page.getByText('Report submitted').waitFor();
-  console.log('[4/9] Report submitted from results page');
+  console.log('[4/10] Report submitted from results page');
 
   // 5. Image flow: upload screenshot, Send, backend extracts then analyzes.
   await page.goto(FRONTEND + '/check');
@@ -87,7 +87,7 @@ const SCAM_EMAIL = [
   await page.getByRole('button', { name: /Send to AI/ }).click();
   await page.waitForURL(/\/results\//, { timeout: 180000 });
   await page.getByText('Retrieved Knowledge (RAG)').waitFor({ timeout: 30000 });
-  console.log('[5/9] Image flow: upload -> /screenshot -> /analyze -> results');
+  console.log('[5/10] Image flow: upload -> /screenshot -> /analyze -> results');
 
   // 6. History shows this user\'s saved analyses; guests get a sign-in prompt.
   await page.goto(FRONTEND + '/history');
@@ -95,7 +95,7 @@ const SCAM_EMAIL = [
   await page.evaluate(() => window.localStorage.clear());
   await page.reload();
   await page.getByText('History is saved to your account').waitFor({ timeout: 30000 });
-  console.log('[6/9] History scoped to the signed-in user; guests prompted to sign in');
+  console.log('[6/10] History scoped to the signed-in user; guests prompted to sign in');
 
   // 7. Email flow: paste raw headers -> /analyze/email -> header findings in results.
   await page.goto(FRONTEND + '/check');
@@ -111,7 +111,7 @@ const SCAM_EMAIL = [
   if (!/DMARC authentication failed|SPF authentication failed/.test(emailBody)) {
     throw new Error('Email authentication findings are missing from the results page');
   }
-  console.log('[7/9] Email flow: raw headers -> /analyze/email -> results with auth findings');
+  console.log('[7/10] Email flow: raw headers -> /analyze/email -> results with auth findings');
 
   // 8. QR flow: upload image -> local OpenCV decode -> /analyze/qr -> results.
   await page.goto(FRONTEND + '/check');
@@ -127,7 +127,7 @@ const SCAM_EMAIL = [
   if (!qrBody.includes('http://free-prize-claim.top/verify')) {
     throw new Error('Decoded QR payload is missing from the results page');
   }
-  console.log('[8/9] QR flow: upload -> local decode -> /analyze/qr -> results');
+  console.log('[8/10] QR flow: upload -> local decode -> /analyze/qr -> results');
 
   // 9. Ask ScamSense: a follow-up question answered from the stored analysis.
   await page.locator('input[aria-label="Ask a question about this analysis"]').fill('Why was this flagged?');
@@ -137,7 +137,70 @@ const SCAM_EMAIL = [
   if (!/Based on:/.test(askBody)) {
     throw new Error('Assistant answer is missing its grounding disclosure');
   }
-  console.log('[9/9] Ask ScamSense: question -> /assistant/ask -> grounded answer with disclaimer');
+  console.log('[9/10] Ask ScamSense: question -> /assistant/ask -> grounded answer with disclaimer');
+
+  // 10. PWA: manifest share target, service worker, and both share paths.
+  const manifest = await page.evaluate(async () => {
+    const response = await fetch('/manifest.webmanifest');
+    return response.json();
+  });
+  if (!manifest.share_target || manifest.share_target.action !== '/share') {
+    throw new Error('Manifest is missing its share target');
+  }
+
+  await page.goto(FRONTEND + '/check');
+  await page.waitForFunction(async () => {
+    if (!('serviceWorker' in navigator)) return false;
+    const registration = await navigator.serviceWorker.getRegistration();
+    return Boolean(registration && (registration.active || registration.waiting));
+  }, null, { timeout: 30000 });
+  // A reload guarantees the page is controlled by the worker.
+  await page.reload();
+
+  // Path A: the service worker parks the share in IndexedDB (files can travel,
+  // URLs cannot), then /check picks it up.
+  const sharedText = 'URGENT: shared straight from the share sheet, verify at http://paypal-verify-account.top/login';
+  const swShare = await page.evaluate(async (text) => {
+    const form = new FormData();
+    form.append('text', text);
+    const response = await fetch('/share', { method: 'POST', body: form });
+    return { redirected: response.redirected, url: response.url };
+  }, sharedText);
+  if (!swShare.redirected) {
+    throw new Error('Share target did not redirect to /check');
+  }
+
+  const parked = await page.evaluate(() => new Promise((resolve) => {
+    const request = indexedDB.open('scamsense-share', 1);
+    request.onerror = () => resolve(false);
+    request.onsuccess = () => {
+      const getRequest = request.result
+        .transaction('payload', 'readonly')
+        .objectStore('payload')
+        .get('latest');
+      getRequest.onsuccess = () => resolve(Boolean(getRequest.result));
+      getRequest.onerror = () => resolve(false);
+    };
+  }));
+  if (!parked) {
+    throw new Error('Service worker did not park the shared payload in IndexedDB');
+  }
+
+  await page.goto(swShare.url);
+  await page.getByText('Loaded from your share').waitFor({ timeout: 30000 });
+  if (!(await page.locator('textarea').inputValue()).includes('shared straight from the share sheet')) {
+    throw new Error('IndexedDB share payload was not loaded into the form');
+  }
+
+  // Path B: the server-side /share fallback carries short shares in the redirect.
+  await page.goto(
+    FRONTEND + '/check?shared=1&text=' + encodeURIComponent('fallback share http://free-prize-claim.top/verify')
+  );
+  await page.getByText('Loaded from your share').waitFor({ timeout: 30000 });
+  if (!(await page.locator('textarea').inputValue()).includes('free-prize-claim.top')) {
+    throw new Error('Server-side share fallback did not prefill the form');
+  }
+  console.log('[10/10] PWA: share target via service worker and server fallback both prefill the form');
 
   await browser.close();
   console.log('E2E PASSED');

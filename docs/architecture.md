@@ -42,6 +42,21 @@ input (text/URL | screenshot | raw email | QR image)
 | `api/auth.py`, `api/store.py` | HMAC-signed tokens, ownership rules, Supabase/in-memory persistence |
 | `api/rag.py`, `api/ollama_client.py` | local retrieval and model client |
 
+## PWA and share-to-ScamSense
+
+| Piece | Role |
+|---|---|
+| `apps/web/public/manifest.webmanifest` | installability, icons, app shortcuts, and the `share_target` that posts shared text/links/images to `/share` |
+| `apps/web/public/sw.js` | intercepts the share POST and parks the payload (files as Blobs) in IndexedDB, then redirects to `/check`; also serves the offline page when a navigation fails |
+| `apps/web/src/app/share/route.js` | server-side fallback for the first share before the worker is installed, or platforms that post straight to the network; short shares travel in the redirect |
+| `apps/web/src/lib/shareTarget.js` | client reader that picks the parked payload up (5-minute expiry) and clears it |
+| `apps/web/src/app/offline/page.js` | offline fallback page |
+| `apps/web/src/components/ServiceWorkerRegistrar.js` | registers the worker in production builds only |
+| `scripts/generate_icons.py` | regenerates the icon set with Pillow, so no binary blobs are hand-maintained |
+
+The share action itself sends nothing anywhere: the user reviews the content in the
+form before it reaches the analysis endpoints.
+
 ## Data Flow
 
 1. User picks a modality and submits content, a raw email or an image.
